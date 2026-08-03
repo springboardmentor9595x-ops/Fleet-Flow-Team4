@@ -1,0 +1,153 @@
+import os
+import sys
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from app.crud.user import set_verification_code, verify_user_otp
+from app.models.user import Base, RoleEnum, User
+
+
+def test_verification_code_is_accepted_and_cleared():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as session:
+        user = User(
+            email="otp@example.com",
+            password="hashed",
+            full_name="OTP User",
+            phone="123",
+            role=RoleEnum.Driver,
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        set_verification_code(session, user, "123456", expires_in_minutes=5)
+
+        verified = verify_user_otp(session, user.email, "123456")
+        assert verified is not None
+        assert verified.is_verified is True
+        assert verified.verification_code is None
+
+        session.refresh(verified)
+        assert verified.verification_code is None
+
+
+def test_unverified_user_signup_retry():
+    from fastapi import BackgroundTasks
+    from fastapi import HTTPException
+    import pytest
+    from app.schemas.user import UserCreate
+    from app.routers.auth import signup
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as session:
+        # Create unverified user
+        user_in = UserCreate(
+            email="retry@example.com",
+            password="Password123!",
+            full_name="First Attempt",
+            phone="111",
+            role=RoleEnum.Driver
+        )
+        bg = BackgroundTasks()
+        res1 = signup(user_in, bg, session)
+        assert res1.email == "retry@example.com"
+        assert res1.full_name == "First Attempt"
+        assert res1.is_verified is True
+
+        # Attempt to signup again with same email but different details
+        user_in2 = UserCreate(
+            email="retry@example.com",
+            password="NewPassword123!",
+            full_name="Second Attempt",
+            phone="222",
+            role=RoleEnum.Driver
+        )
+        with pytest.raises(HTTPException) as excinfo:
+            signup(user_in2, bg, session)
+        assert excinfo.value.status_code == 400
+        assert excinfo.value.detail == "Email already registered"
+
+
+def test_signup_auto_verifies_when_verification_email_fails(monkeypatch):
+    from fastapi import BackgroundTasks
+    from app.routers.auth import signup
+    from app.schemas.user import UserCreate
+    import app.routers.auth as auth_router
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    def raise_email_error(*args, **kwargs):
+        raise RuntimeError("SMTP unavailable")
+
+    monkeypatch.setattr(auth_router, "send_verification_email", raise_email_error)
+
+    with Session() as session:
+        user_in = UserCreate(
+            email="fallback@example.com",
+            password="Password123!",
+            full_name="Fallback User",
+            phone="999",
+            role=RoleEnum.Driver,
+        )
+        res = signup(user_in, BackgroundTasks(), session)
+        assert res.email == "fallback@example.com"
+
+        session.expire_all()
+        db_user = session.query(User).filter(User.email == "fallback@example.com").first()
+        assert db_user is not None
+        assert db_user.is_verified is True
+
+
+def test_password_normalization_commits():
+    from fastapi import BackgroundTasks
+    from fastapi.security import OAuth2PasswordRequestForm
+    from app.routers.auth import login
+    from app.core.security import verify_password
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as session:
+        # Create verified user with plain-text password
+        user = User(
+            email="plaintext@example.com",
+            password="plain_password",
+            full_name="Plain Text User",
+            phone="123",
+            role=RoleEnum.Driver,
+            is_verified=True,
+        )
+        session.add(user)
+        session.commit()
+
+        bg = BackgroundTasks()
+        form_data = OAuth2PasswordRequestForm(
+            username="plaintext@example.com",
+            password="plain_password",
+            scope="",
+            client_id=None,
+            client_secret=None,
+            grant_type="password"
+        )
+        # Login should trigger password normalization and hashing
+        res = login(bg, form_data, session)
+        assert res["access_token"] is not None
+
+        # Verify that database password is now hashed (not plaintext anymore)
+        session.expire_all()
+        db_user = session.query(User).filter(User.email == "plaintext@example.com").first()
+        assert db_user.password != "plain_password"
+        assert verify_password("plain_password", db_user.password)
