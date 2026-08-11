@@ -25,16 +25,9 @@ def _send_verification_email(db: Session, email: str, full_name: str) -> None:
         if not user:
             return
         set_verification_code(db, user, otp, expires_in_minutes=10)
-        delivered = send_verification_email(recipient=email, full_name=full_name, otp=otp)
-        if not delivered:
-            raise RuntimeError("Verification email delivery failed")
+        send_verification_email(recipient=email, full_name=full_name, otp=otp)
     except Exception:
-        if user is not None:
-            user.is_verified = True
-            user.verification_code = None
-            user.verification_expires_at = None
-            db.commit()
-            db.refresh(user)
+        pass
 
 
 @router.post("/signup", response_model=UserOut)
@@ -132,3 +125,13 @@ def login(background_tasks: BackgroundTasks, form_data: OAuth2PasswordRequestFor
 @router.get("/me", response_model=UserOut)
 def read_current_user(current_user = Depends(get_current_user)):
     return current_user
+
+@router.delete("/me", status_code=204)
+def delete_current_user(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    db.delete(current_user)
+    db.commit()
+
+@router.get("/users", response_model=list[UserOut])
+def list_users(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    from app.models.user import User
+    return db.query(User).all()

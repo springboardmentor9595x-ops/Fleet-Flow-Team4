@@ -62,9 +62,9 @@ def test_unverified_user_signup_retry():
         res1 = signup(user_in, bg, session)
         assert res1.email == "retry@example.com"
         assert res1.full_name == "First Attempt"
-        assert res1.is_verified is True
+        assert res1.is_verified is False
 
-        # Attempt to signup again with same email but different details
+        # Attempt to signup again with same email but different details - should replace unverified record
         user_in2 = UserCreate(
             email="retry@example.com",
             password="NewPassword123!",
@@ -72,13 +72,29 @@ def test_unverified_user_signup_retry():
             phone="222",
             role=RoleEnum.Driver
         )
+        res2 = signup(user_in2, bg, session)
+        assert res2.email == "retry@example.com"
+        assert res2.full_name == "Second Attempt"
+        assert res2.is_verified is False
+
+        # Once user is verified, signup attempt with same email must fail with 400
+        res2.is_verified = True
+        session.commit()
+
+        user_in3 = UserCreate(
+            email="retry@example.com",
+            password="ThirdPassword123!",
+            full_name="Third Attempt",
+            phone="333",
+            role=RoleEnum.Driver
+        )
         with pytest.raises(HTTPException) as excinfo:
-            signup(user_in2, bg, session)
+            signup(user_in3, bg, session)
         assert excinfo.value.status_code == 400
         assert excinfo.value.detail == "Email already registered"
 
 
-def test_signup_auto_verifies_when_verification_email_fails(monkeypatch):
+def test_signup_preserves_unverified_state_when_verification_email_fails(monkeypatch):
     from fastapi import BackgroundTasks
     from app.routers.auth import signup
     from app.schemas.user import UserCreate
@@ -107,7 +123,8 @@ def test_signup_auto_verifies_when_verification_email_fails(monkeypatch):
         session.expire_all()
         db_user = session.query(User).filter(User.email == "fallback@example.com").first()
         assert db_user is not None
-        assert db_user.is_verified is True
+        assert db_user.is_verified is False
+        assert db_user.verification_code is not None
 
 
 def test_password_normalization_commits():

@@ -8,6 +8,12 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem("token") || "");
   const [loading, setLoading] = useState(true);
 
+  const logout = () => {
+    localStorage.removeItem("token");
+    setToken("");
+    setUser(null);
+  };
+
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
     if (!storedToken) {
@@ -23,6 +29,7 @@ export function AuthProvider({ children }) {
       .catch(() => {
         localStorage.removeItem("token");
         setToken("");
+        setUser(null);
       })
       .finally(() => {
         setLoading(false);
@@ -63,14 +70,17 @@ export function AuthProvider({ children }) {
     return response.data;
   };
 
-  const logout = () => {
-    localStorage.removeItem("token");
-    setToken("");
-    setUser(null);
+  const deleteAccount = async () => {
+    try {
+      await api.delete("/auth/me");
+    } catch (e) {
+      // proceed with logout
+    }
+    logout();
   };
 
   const value = useMemo(
-    () => ({ user, token, loading, login, signup, verifyOtp, resendOtp, logout }),
+    () => ({ user, token, loading, login, signup, verifyOtp, resendOtp, logout, deleteAccount }),
     [user, token, loading]
   );
 

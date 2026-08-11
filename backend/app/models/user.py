@@ -21,7 +21,7 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False, index=True)
     password = Column(String(255), nullable=False)
     phone = Column(String(15))
-    role = Column(Enum(RoleEnum), nullable=False, default=RoleEnum.Driver)
+    role = Column(Enum(RoleEnum, name="roleenum"), nullable=False, default=RoleEnum.Driver)
     is_verified = Column(Boolean, nullable=False, default=False)
     verification_code = Column(String(10), nullable=True)
     verification_expires_at = Column(DateTime, nullable=True)

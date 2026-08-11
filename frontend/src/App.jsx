@@ -1,29 +1,40 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "./context/AuthContext";
-import LoginPage from "./pages/Login";
-import SignupPage from "./pages/Signup";
-import VerifyOtpPage from "./pages/VerifyOtp";
-import DashboardPage from "./pages/Dashboard";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
-function App() {
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import VerifyOtp from "./pages/VerifyOtp";
+import Dashboard from "./pages/Dashboard";
+import Shipments from "./pages/shipment";
+import Trips from "./pages/Trips";
+
+export default function App() {
   return (
-    <AuthProvider>
+    <ErrorBoundary>
       <BrowserRouter>
-        <Toaster position="top-right" />
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/verify-otp" element={<VerifyOtpPage />} />
-          <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
+        <AuthProvider>
+          <Toaster position="top-right" />
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/verify-otp" element={<VerifyOtp />} />
+
+            {/* Protected Routes */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/shipments" element={<Shipments />} />
+              <Route path="/trips" element={<Trips />} />
+            </Route>
+
+            {/* Default Route */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
-    </AuthProvider>
+    </ErrorBoundary>
   );
 }
-
-export default App;
