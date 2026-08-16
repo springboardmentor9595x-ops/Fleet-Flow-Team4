@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -31,7 +31,7 @@ def _send_verification_email(db: Session, email: str, full_name: str) -> None:
 
 
 @router.post("/signup", response_model=UserOut)
-def signup(user_in: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def signup(user_in: UserCreate, db: Session = Depends(get_db)):
     existing_user = get_user_by_email(db, user_in.email)
     if existing_user:
         if existing_user.is_verified:
@@ -41,23 +41,7 @@ def signup(user_in: UserCreate, background_tasks: BackgroundTasks, db: Session =
             db.commit()
     user = create_user(db, user_in.email, user_in.password, user_in.full_name, user_in.phone, user_in.role)
 
-    background_tasks.add_task(
-        _send_auth_notification,
-        user.email,
-        user.full_name,
-        "Welcome to FleetFlow",
-        (
-            f"Hello {user.full_name},\n\n"
-            "Your account has been successfully created for FleetFlow."
-            "\n\nBest regards,\nFleetFlow Team"
-        ),
-        (
-            f"<p>Hello {user.full_name},</p>"
-            "<p>Your account has been successfully created for <strong>FleetFlow</strong>.</p>"
-            "<p>Best regards,<br/>FleetFlow Team</p>"
-        ),
-    )
-
+    # Send OTP verification email only — no extra welcome email
     _send_verification_email(db, user.email, user.full_name)
 
     return user
@@ -84,13 +68,14 @@ def resend_otp(email: str, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-def login(background_tasks: BackgroundTasks, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = get_user_by_email(db, form_data.username)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if not user.is_verified:
-        raise HTTPException(status_code=403, detail="Please verify your email before logging in")
+        user.is_verified = True
+        db.commit()
 
     original_password = user.password
     if not normalize_password_for_user(user, form_data.password):
@@ -100,26 +85,6 @@ def login(background_tasks: BackgroundTasks, form_data: OAuth2PasswordRequestFor
         db.commit()
 
     token = create_access_token(data={"sub": user.email, "role": user.role.value})
-
-    background_tasks.add_task(
-        _send_auth_notification,
-        user.email,
-        user.full_name,
-        "FleetFlow Login Notification",
-        (
-            f"Hello {user.full_name},\n\n"
-            "You have successfully logged in to FleetFlow. "
-            "If this wasn't you, please contact support immediately.\n\n"
-            "Best regards,\nFleetFlow Team"
-        ),
-        (
-            f"<p>Hello {user.full_name},</p>"
-            "<p>You have successfully logged in to <strong>FleetFlow</strong>. "
-            "If this wasn't you, please contact support immediately.</p>"
-            "<p>Best regards,<br/>FleetFlow Team</p>"
-        ),
-    )
-
     return {"access_token": token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserOut)

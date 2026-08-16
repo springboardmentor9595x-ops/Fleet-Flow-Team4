@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Link } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/Sidebar";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../api/trips";
 import { getVehicles } from "../api/vehicles";
 import { getShipments } from "../api/shipments";
+import { getDrivers } from "../api/drivers";
 import TrackingMap from "../components/TrackingMap";
 
 const emptyForm = {
@@ -26,21 +27,23 @@ const emptyForm = {
   route_type: "fastest",
 };
 
-// Popular Indian cities for quick selection
-const QUICK_CITIES = [
-  { name: "New Delhi",  lat: 28.6139, lng: 77.2090 },
-  { name: "Mumbai",     lat: 19.0760, lng: 72.8777 },
-  { name: "Bangalore",  lat: 12.9716, lng: 77.5946 },
-  { name: "Chennai",    lat: 13.0827, lng: 80.2707 },
-  { name: "Hyderabad",  lat: 17.3850, lng: 78.4867 },
-  { name: "Kolkata",    lat: 22.5726, lng: 88.3639 },
-  { name: "Pune",       lat: 18.5204, lng: 73.8567 },
-  { name: "Ahmedabad",  lat: 23.0225, lng: 72.5714 },
-  { name: "Jaipur",     lat: 26.9124, lng: 75.7873 },
-  { name: "Lucknow",    lat: 26.8467, lng: 80.9462 },
-  { name: "Surat",      lat: 21.1702, lng: 72.8311 },
-  { name: "Nagpur",     lat: 21.1458, lng: 79.0882 },
-];
+// Known city coordinate lookup
+const CITY_COORDS = {
+  kakinada:       { name: "Kakinada",       lat: 16.9891, lng: 82.2475 },
+  vijayawada:     { name: "Vijayawada",     lat: 16.5062, lng: 80.6480 },
+  visakhapatnam:  { name: "Visakhapatnam",  lat: 17.6868, lng: 83.2185 },
+  rajahmundry:    { name: "Rajahmundry",    lat: 17.0005, lng: 81.8040 },
+  guntur:         { name: "Guntur",         lat: 16.3067, lng: 80.4365 },
+  tirupati:       { name: "Tirupati",       lat: 13.6288, lng: 79.4192 },
+  hyderabad:      { name: "Hyderabad",      lat: 17.3850, lng: 78.4867 },
+  chennai:        { name: "Chennai",        lat: 13.0827, lng: 80.2707 },
+  bangalore:      { name: "Bangalore",      lat: 12.9716, lng: 77.5946 },
+  mumbai:         { name: "Mumbai",         lat: 19.0760, lng: 72.8777 },
+  newdelhi:       { name: "New Delhi",      lat: 28.6139, lng: 77.2090 },
+  kolkata:        { name: "Kolkata",        lat: 22.5726, lng: 88.3639 },
+};
+
+const QUICK_CITIES = Object.values(CITY_COORDS);
 
 async function geocodeCity(query) {
   if (!query || query.length < 2) return [];
@@ -66,7 +69,11 @@ const STATUS_COLORS = {
 };
 
 export default function Trips() {
-  const { user, logout } = useAuth();
+  const location = useLocation();
+  const trackedShipmentId = location.state?.shipmentId;
+
+  const { user } = useAuth();
+  const isDriver = user?.role === "Driver";
   const canManage =
     user?.role === "Admin" ||
     user?.role === "FleetManager" ||
@@ -74,11 +81,15 @@ export default function Trips() {
 
   const [trips, setTrips] = useState([]);
   const [vehicles, setVehicles] = useState([]);
-  const [shipments, setShipments] = useState([]);
+  const [shipments, setShipments] = useState([]);        // 'Created' only — for dropdown
+  const [allShipments, setAllShipments] = useState([]);  // ALL — for tracking lookup
+  const [drivers, setDrivers] = useState([]);
   const [selectedTrip, setSelectedTrip] = useState(null);
+  const [trackedShipment, setTrackedShipment] = useState(null); // the specific shipment being tracked
   const [livePositions, setLivePositions] = useState({});
   const [routeOptions, setRouteOptions] = useState(null);
   const [selectedRouteType, setSelectedRouteType] = useState("fastest");
+  const [calculatingRoute, setCalculatingRoute] = useState(false);
   const [rerouteNotice, setRerouteNotice] = useState("");
 
   const [showForm, setShowForm] = useState(false);
@@ -98,12 +109,34 @@ export default function Trips() {
 
   const socketRef = useRef(null);
 
-  const loadTrips = async () => {
+  const loadTrips = async (allShipmentsData = null) => {
     try {
       const res = await getTrips();
-      setTrips(res.data);
-      if (res.data.length > 0 && !selectedTrip) {
-        setSelectedTrip(res.data[0]);
+      const rawTripList = res.data || [];
+      const shipmentsSource = allShipmentsData || allShipments || [];
+
+      const enrich = (t) => {
+        if (!t) return null;
+        const linkedShip = t.shipment || shipmentsSource.find((s) => String(s.shipment_id) === String(t.shipment_id));
+        return linkedShip ? { ...t, shipment: linkedShip } : t;
+      };
+
+      const tripList = rawTripList.map(enrich);
+      setTrips(tripList);
+
+      if (trackedShipmentId) {
+        // Find the trip that belongs to THIS specific shipment
+        const found = tripList.find((t) => String(t.shipment_id) === String(trackedShipmentId));
+        if (found) {
+          setSelectedTrip(found);
+        } else {
+          setSelectedTrip(null);
+        }
+        // Set the tracked shipment for coordinate lookup
+        const ship = shipmentsSource.find((s) => String(s.shipment_id) === String(trackedShipmentId));
+        if (ship) setTrackedShipment(ship);
+      } else if (tripList.length > 0) {
+        setSelectedTrip((prev) => (prev ? enrich(prev) : tripList[0]));
       }
     } catch (err) {
       setError("Failed to load trips");
@@ -112,21 +145,32 @@ export default function Trips() {
 
   const loadDropdownData = async () => {
     try {
-      const [vehRes, shipRes] = await Promise.all([
-        getVehicles(),
-        getShipments(),
+      const [vehRes, shipRes, drvRes] = await Promise.all([
+        getVehicles().catch(() => ({ data: [] })),
+        getShipments().catch(() => ({ data: [] })),
+        getDrivers().catch(() => ({ data: [] })),
       ]);
-      setVehicles(vehRes.data);
-      setShipments(shipRes.data.filter((s) => s.status === "Created"));
+      setVehicles(vehRes.data || []);
+      // For dropdowns we only want 'Created' shipments
+      // but store ALL shipments so we can look up source/destination for any tracked shipment
+      const allShips = shipRes.data || [];
+      setShipments(allShips.filter((s) => s.status === "Created"));
+      setAllShipments(allShips);
+      setDrivers(drvRes.data || []);
+      return allShips; // return so loadTrips can use it immediately
     } catch (err) {
-      // non-fatal
+      return [];
     }
   };
 
   // WebSocket Live GPS Telemetry Subscriber
   useEffect(() => {
-    loadTrips();
-    loadDropdownData();
+    // Load shipments first so coordinate lookup works immediately for track navigation
+    const init = async () => {
+      const allShips = await loadDropdownData();
+      await loadTrips(allShips);
+    };
+    init();
 
     const wsUrl = `ws://${window.location.hostname}:8000/ws/tracking`;
     const socket = new WebSocket(wsUrl);
@@ -158,19 +202,28 @@ export default function Trips() {
     };
   }, []);
 
-  // Fetch route options when coordinates change in form or trip selection
-  useEffect(() => {
-    if (showForm && form.start_lat && form.start_lng && form.end_lat && form.end_lng) {
-      fetchRouteOptions({
-        start_lat: Number(form.start_lat),
-        start_lng: Number(form.start_lng),
-        end_lat: Number(form.end_lat),
-        end_lng: Number(form.end_lng),
-      })
-        .then((res) => setRouteOptions(res.data))
-        .catch(() => {});
+  const handleCalculateRoute = async (customForm = null) => {
+    const targetForm = customForm || form;
+    if (!targetForm.start_lat || !targetForm.start_lng || !targetForm.end_lat || !targetForm.end_lng) {
+      setError("Please select both Start Location and Destination before calculating route.");
+      return;
     }
-  }, [showForm, form.start_lat, form.start_lng, form.end_lat, form.end_lng]);
+    setError("");
+    setCalculatingRoute(true);
+    try {
+      const res = await fetchRouteOptions({
+        start_lat: Number(targetForm.start_lat),
+        start_lng: Number(targetForm.start_lng),
+        end_lat: Number(targetForm.end_lat),
+        end_lng: Number(targetForm.end_lng),
+      });
+      setRouteOptions(res.data);
+    } catch (err) {
+      setError("Failed to calculate route optimization");
+    } finally {
+      setCalculatingRoute(false);
+    }
+  };
 
   const openAddForm = () => {
     setForm(emptyForm);
@@ -184,7 +237,100 @@ export default function Trips() {
   };
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm((prev) => {
+      const updated = { ...prev, [name]: value };
+
+      // Auto pre-fill cities if selecting shipment
+      if (name === "shipment_id") {
+        const selectedShip = shipments.find((s) => s.shipment_id === value);
+        if (selectedShip) {
+          if (selectedShip.vehicle_id) {
+            updated.vehicle_id = selectedShip.vehicle_id;
+          }
+          if (selectedShip.driver_id) {
+            updated.driver_id = selectedShip.driver_id;
+          }
+
+          // Use safe lookup: exact key match only (≤2-char strings like "AP" return undefined)
+          const safeKey = (str) => {
+            if (!str) return null;
+            const k = str.trim().toLowerCase();
+            // Exact match
+            if (CITY_COORDS[k]) return CITY_COORDS[k];
+            // Block state abbreviations (≤2 chars)
+            if (k.length <= 2) return null;
+            // Try trimming common suffixes (e.g. "kakinada, ap" → try "kakinada")
+            const tokens = k.split(/[\s,]+/).filter((t) => t.length >= 3);
+            for (const tok of tokens) {
+              if (CITY_COORDS[tok]) return CITY_COORDS[tok];
+            }
+            return null;
+          };
+          const sMatch = safeKey(selectedShip.source);
+          const dMatch = safeKey(selectedShip.destination);
+
+          if (sMatch) {
+            updated.start_lat = String(sMatch.lat);
+            updated.start_lng = String(sMatch.lng);
+            setStartLabel(sMatch.name);
+          }
+          if (dMatch) {
+            updated.end_lat = String(dMatch.lat);
+            updated.end_lng = String(dMatch.lng);
+            setEndLabel(dMatch.name);
+          }
+
+          if (sMatch && dMatch) {
+            handleCalculateRoute(updated);
+          } else {
+            // Geocode fallback for cities not in CITY_COORDS
+            (async () => {
+              let sLat = sMatch ? sMatch.lat : null;
+              let sLng = sMatch ? sMatch.lng : null;
+              let sName = sMatch ? sMatch.name : selectedShip.source;
+              let eLat = dMatch ? dMatch.lat : null;
+              let eLng = dMatch ? dMatch.lng : null;
+              let eName = dMatch ? dMatch.name : selectedShip.destination;
+
+              if (!sMatch && selectedShip.source && selectedShip.source.trim().length > 2) {
+                const g = await geocodeCity(selectedShip.source);
+                if (g.length > 0) {
+                  sLat = g[0].lat;
+                  sLng = g[0].lng;
+                  sName = g[0].name;
+                }
+              }
+              if (!dMatch && selectedShip.destination && selectedShip.destination.trim().length > 2) {
+                const g = await geocodeCity(selectedShip.destination);
+                if (g.length > 0) {
+                  eLat = g[0].lat;
+                  eLng = g[0].lng;
+                  eName = g[0].name;
+                }
+              }
+
+              if (sLat && eLat) {
+                setForm((cur) => {
+                  const withCoords = {
+                    ...cur,
+                    start_lat: String(sLat),
+                    start_lng: String(sLng),
+                    end_lat: String(eLat),
+                    end_lng: String(eLng),
+                  };
+                  setStartLabel(sName);
+                  setEndLabel(eName);
+                  handleCalculateRoute(withCoords);
+                  return withCoords;
+                });
+              }
+            })();
+          }
+        }
+      }
+      return updated;
+    });
   };
 
   // Debounced city search using Nominatim
@@ -200,23 +346,40 @@ export default function Trips() {
     }, 400);
   };
 
-  // Called when user picks a city from the dropdown or quick-select
   const handleSelectCity = (city, type) => {
-    if (type === "start") {
-      setForm((prev) => ({ ...prev, start_lat: String(city.lat), start_lng: String(city.lng) }));
-      setStartLabel(city.name);
-      setStartQuery("");
-      setStartResults([]);
-    } else {
-      setForm((prev) => ({ ...prev, end_lat: String(city.lat), end_lng: String(city.lng) }));
-      setEndLabel(city.name);
-      setEndQuery("");
-      setEndResults([]);
-    }
+    setForm((prev) => {
+      const updated =
+        type === "start"
+          ? { ...prev, start_lat: String(city.lat), start_lng: String(city.lng) }
+          : { ...prev, end_lat: String(city.lat), end_lng: String(city.lng) };
+
+      if (type === "start") {
+        setStartLabel(city.name);
+        setStartQuery("");
+        setStartResults([]);
+      } else {
+        setEndLabel(city.name);
+        setEndQuery("");
+        setEndResults([]);
+      }
+
+      if (updated.start_lat && updated.end_lat) {
+        handleCalculateRoute(updated);
+      }
+      return updated;
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.vehicle_id || !form.driver_id || !form.shipment_id) {
+      setError("Please select Vehicle, Driver, and Shipment.");
+      return;
+    }
+    if (!form.start_lat || !form.end_lat) {
+      setError("Please select Start Location and Destination.");
+      return;
+    }
     setError("");
     try {
       const payload = {
@@ -231,8 +394,8 @@ export default function Trips() {
       };
       const res = await createTrip(payload);
       setShowForm(false);
-      loadTrips();
-      loadDropdownData();
+      await loadTrips();
+      await loadDropdownData();
       setSelectedTrip(res.data);
     } catch (err) {
       setError(err.response?.data?.detail || "Something went wrong");
@@ -244,7 +407,7 @@ export default function Trips() {
     setError("");
     try {
       const res = await startTrip(tripId);
-      loadTrips();
+      await loadTrips();
       setSelectedTrip(res.data);
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to start trip");
@@ -258,8 +421,8 @@ export default function Trips() {
     setError("");
     try {
       const res = await completeTrip(tripId);
-      loadTrips();
-      loadDropdownData();
+      await loadTrips();
+      await loadDropdownData();
       setSelectedTrip(res.data);
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to complete trip");
@@ -278,6 +441,7 @@ export default function Trips() {
         setSelectedTrip(null);
       }
       await loadTrips();
+      await loadDropdownData();
     } catch (err) {
       setDeleteConfirm(null);
       setError(err.response?.data?.detail || "Failed to delete trip");
@@ -311,6 +475,29 @@ export default function Trips() {
     }
   };
 
+  const displayTrips = isDriver
+    ? trips.filter((t) => t.driver_id === user?.user_id || true)
+    : trips;
+
+  // Convert raw minutes to "Xh Ym" or "Ym" display
+  const formatDuration = (minutes) => {
+    if (!minutes && minutes !== 0) return "—";
+    const totalMins = Math.round(Number(minutes));
+    if (isNaN(totalMins)) return "—";
+    if (totalMins < 60) return `${totalMins}m`;
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return `${h}h ${m}m`;
+  };
+
+  // Format ETA time nicely (duration in minutes)
+  const formatETA = (opt) => {
+    if (!opt || !opt.duration) return "N/A";
+    const now = new Date();
+    const etaDate = new Date(now.getTime() + opt.duration * 60000);
+    return etaDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
   return (
     <div className="flex min-h-screen bg-[#020617] text-white font-sans overflow-x-hidden">
       <Sidebar />
@@ -319,7 +506,7 @@ export default function Trips() {
         <div className="flex flex-wrap justify-between items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white tracking-tight">
-              Route Optimization & Live Telemetry
+              {isDriver ? "My Assigned Trips" : "Route Optimization & Live Telemetry"}
             </h1>
             <p className="text-xs font-mono font-bold tracking-wider text-cyan-400 uppercase mt-1">
               FLEET LOGISTICS & ROUTE INTELLIGENCE
@@ -350,10 +537,18 @@ export default function Trips() {
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap justify-between items-center gap-2">
               <div>
                 <h3 className="font-bold text-sm text-white">
-                  {selectedTrip ? `Trip Tracking - ID: ${selectedTrip.trip_id ? selectedTrip.trip_id.slice(0, 8) : "N/A"}...` : "Select a Trip"}
+                  {selectedTrip
+                    ? `Trip Tracking — ${selectedTrip.shipment?.source || "Source"} → ${selectedTrip.shipment?.destination || "Destination"} (ID: ${selectedTrip.trip_id ? selectedTrip.trip_id.slice(0, 8) : "N/A"}...)`
+                    : trackedShipment
+                    ? `Shipment: ${trackedShipment.source} → ${trackedShipment.destination}`
+                    : "Select a Trip"}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Strategy: <span className="text-cyan-400 font-semibold uppercase">{selectedTrip?.route_type || selectedRouteType}</span>
+                  {selectedTrip
+                    ? <>Strategy: <span className="text-cyan-400 font-semibold uppercase">{selectedTrip?.route_type || selectedRouteType}</span></>
+                    : trackedShipment
+                    ? <span className="text-amber-400">No trip assigned to this shipment yet</span>
+                    : null}
                 </p>
               </div>
               {selectedTrip && canManage && (
@@ -367,8 +562,20 @@ export default function Trips() {
               )}
             </div>
 
+            {/* Show info banner when tracking a shipment with no trip yet */}
+            {trackedShipmentId && !selectedTrip && trackedShipment && (
+              <div className="bg-amber-950/30 border border-amber-700/60 rounded-xl px-4 py-3 text-xs text-amber-300 flex items-center gap-2">
+                <span className="text-lg">⚠️</span>
+                <span>
+                  Shipment <strong>{trackedShipment.tracking_number}</strong> ({trackedShipment.source} → {trackedShipment.destination}) has not been assigned a trip yet.
+                  Go to <strong>+ Schedule Trip</strong> to create and assign a trip for live tracking.
+                </span>
+              </div>
+            )}
+
             <TrackingMap
               trip={selectedTrip}
+              trackedShipment={trackedShipment}
               livePosition={selectedTrip ? livePositions[selectedTrip.trip_id] : null}
               routeOptions={routeOptions}
               selectedRouteType={selectedRouteType}
@@ -379,11 +586,11 @@ export default function Trips() {
           {/* Right Column: Trip Actions & Active List */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="text-base font-bold">Scheduled & Active Trips</h2>
+              <h2 className="text-base font-bold">{isDriver ? "Assigned Trips" : "Scheduled & Active Trips"}</h2>
               {canManage && (
                 <button
                   onClick={openAddForm}
-                  className="px-3 py-1.5 bg-cyan-500 text-slate-950 font-bold text-xs rounded-lg hover:bg-cyan-400"
+                  className="px-3 py-1.5 bg-cyan-500 text-slate-950 font-bold text-xs rounded-lg hover:bg-cyan-400 shadow-lg shadow-cyan-500/20 transition"
                 >
                   + Schedule Trip
                 </button>
@@ -391,7 +598,7 @@ export default function Trips() {
             </div>
 
             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-              {trips.map((t) => {
+              {displayTrips.map((t) => {
                 const isSelected = selectedTrip?.trip_id === t.trip_id;
                 const live = livePositions[t.trip_id];
 
@@ -425,7 +632,7 @@ export default function Trips() {
 
                     <div className="flex justify-between items-center text-[11px] text-slate-300 bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
                       <span>📏 {t.distance ? `${t.distance} km` : "-"}</span>
-                      <span>⏱️ {t.duration ? `${t.duration} min` : "-"}</span>
+                      <span>⏱️ {formatDuration(t.duration)}</span>
                       <span className="text-cyan-400 font-medium">{t.route_type || "fastest"}</span>
                     </div>
 
@@ -447,10 +654,10 @@ export default function Trips() {
                           }}
                           className="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-800 rounded text-xs font-bold hover:bg-blue-500/30"
                         >
-                          Start Trip
+                          ▶ START TRIP
                         </button>
                       )}
-                      {t.status === "Active" && (
+                      {(t.status === "Active" || t.status === "Scheduled") && (
                         <button
                           disabled={actionLoading}
                           onClick={(e) => {
@@ -459,7 +666,7 @@ export default function Trips() {
                           }}
                           className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-800 rounded text-xs font-bold hover:bg-emerald-500/30"
                         >
-                          End & Deliver Trip
+                          ✔ COMPLETE TRIP
                         </button>
                       )}
                       {canManage && (
@@ -469,16 +676,16 @@ export default function Trips() {
                             e.stopPropagation();
                             setDeleteConfirm(t);
                           }}
-                          className="px-3 py-1 bg-rose-500/20 text-rose-400 border border-rose-800 rounded text-xs font-bold hover:bg-rose-500/30"
+                          className="px-2 py-1 bg-rose-500/20 text-rose-400 border border-rose-800 rounded text-xs hover:bg-rose-500/30"
                         >
-                          🗑 Delete
+                          🗑
                         </button>
                       )}
                     </div>
                   </div>
                 );
               })}
-              {trips.length === 0 && (
+              {displayTrips.length === 0 && (
                 <p className="text-xs text-slate-500 text-center p-4">No trips scheduled.</p>
               )}
             </div>
@@ -498,12 +705,7 @@ export default function Trips() {
                 <span className="font-mono text-rose-400 font-semibold">
                   {deleteConfirm.trip_id ? deleteConfirm.trip_id.slice(0, 8) : "N/A"}...
                 </span>?
-                This action cannot be undone.
               </p>
-              <div className="bg-slate-950/60 rounded-lg p-3 text-xs text-slate-400 space-y-1 border border-slate-800">
-                <p>Status: <span className="text-white font-semibold">{deleteConfirm.status}</span></p>
-                <p>Route: {deleteConfirm.start_lat}, {deleteConfirm.start_lng} → {deleteConfirm.end_lat}, {deleteConfirm.end_lng}</p>
-              </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   onClick={() => setDeleteConfirm(null)}
@@ -528,215 +730,204 @@ export default function Trips() {
         {showForm && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto text-xs">
-              <h3 className="text-lg font-bold text-white">Schedule New Trip</h3>
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 className="text-lg font-bold text-white">Schedule New Trip</h3>
+                <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-white">✕</button>
+              </div>
               <form onSubmit={handleSubmit} className="space-y-3">
+                {/* Available Vehicles Dropdown */}
                 <div>
-                  <label className="text-slate-400 mb-1 block">Vehicle</label>
+                  <label className="text-slate-400 mb-1 block font-semibold">Select Available Vehicle *</label>
                   <select
                     name="vehicle_id"
                     value={form.vehicle_id}
                     onChange={handleChange}
                     required
-                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white focus:outline-none focus:border-cyan-500"
                   >
-                    <option value="">Select Available Vehicle</option>
+                    <option value="">-- Choose Available Vehicle --</option>
                     {vehicles
                       .filter((v) => v.status === "Available")
                       .map((v) => (
                         <option key={v.vehicle_id} value={v.vehicle_id}>
-                          {v.registration_number} ({v.brand} {v.model})
+                          {v.registration_number} ({v.brand} {v.model}) — Capacity: {v.capacity}kg
                         </option>
                       ))}
                   </select>
                 </div>
 
+                {/* Available Drivers Dropdown */}
                 <div>
-                  <label className="text-slate-400 mb-1 block">Driver ID (UUID)</label>
-                  <input
+                  <label className="text-slate-400 mb-1 block font-semibold">Select Available Driver *</label>
+                  <select
                     name="driver_id"
                     value={form.driver_id}
                     onChange={handleChange}
-                    placeholder="Driver UUID"
                     required
-                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
-                  />
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="">-- Choose Available Driver --</option>
+                    {drivers
+                      .filter((d) => d.status === "Available")
+                      .map((d) => (
+                        <option key={d.driver_id} value={d.driver_id}>
+                          {d.full_name} — Available ({d.license_number || `DRV-${d.driver_id.slice(0, 6)}`})
+                        </option>
+                      ))}
+                  </select>
                 </div>
 
+                {/* Created Shipments Dropdown */}
                 <div>
-                  <label className="text-slate-400 mb-1 block">Shipment</label>
+                  <label className="text-slate-400 mb-1 block font-semibold">Select Created Shipment *</label>
                   <select
                     name="shipment_id"
                     value={form.shipment_id}
                     onChange={handleChange}
                     required
-                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white focus:outline-none focus:border-cyan-500"
                   >
-                    <option value="">Select Created Shipment</option>
+                    <option value="">-- Choose Created Shipment --</option>
                     {shipments.map((s) => (
                       <option key={s.shipment_id} value={s.shipment_id}>
-                        {s.tracking_number} ({s.source} → {s.destination})
+                        {s.tracking_number} ({s.source} → {s.destination}) — Customer: {s.customer_name}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* ── Location Search ───────────────────────────────── */}
-                <div className="space-y-3">
-                  <label className="text-cyan-400 font-semibold block text-xs">📍 Quick Select City</label>
-                  {/* Quick-pick chips */}
+                {/* Quick Select City Controls */}
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <p className="text-slate-300 font-semibold">Quick Select Route Cities:</p>
                   <div className="flex flex-wrap gap-1.5">
                     {QUICK_CITIES.map((c) => (
-                      <div key={c.name} className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectCity(c, "start")}
-                          title={`Set ${c.name} as Start`}
-                          className={`px-2 py-1 rounded-md text-[10px] font-medium border transition ${
-                            startLabel === c.name
-                              ? "bg-cyan-500/20 border-cyan-500 text-cyan-300"
-                              : "bg-slate-800 border-slate-700 text-slate-400 hover:border-cyan-600 hover:text-white"
-                          }`}
-                        >
-                          🟢 {c.name}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectCity(c, "end")}
-                          title={`Set ${c.name} as End`}
-                          className={`px-2 py-1 rounded-md text-[10px] font-medium border transition ${
-                            endLabel === c.name
-                              ? "bg-rose-500/20 border-rose-500 text-rose-300"
-                              : "bg-slate-800 border-slate-700 text-slate-400 hover:border-rose-600 hover:text-white"
-                          }`}
-                        >
-                          🔴
-                        </button>
-                      </div>
+                      <button
+                        key={c.name}
+                        type="button"
+                        onClick={() => {
+                          if (!form.start_lat) handleSelectCity(c, "start");
+                          else handleSelectCity(c, "end");
+                        }}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-cyan-950 hover:text-cyan-300 text-slate-300 border border-slate-700 rounded-lg text-[10px] font-medium"
+                      >
+                        {c.name}
+                      </button>
                     ))}
                   </div>
-
-                  {/* Search inputs */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Start Location */}
-                    <div className="relative">
-                      <label className="text-slate-400 mb-1 block">🟢 Start Location</label>
-                      {startLabel && (
-                        <div className="flex items-center gap-1 bg-cyan-950/40 border border-cyan-800 rounded-lg px-2 py-1 mb-1 text-[10px] text-cyan-300">
-                          <span className="truncate">{startLabel}</span>
-                          <button type="button" onClick={() => { setStartLabel(""); setForm(p=>({...p,start_lat:"",start_lng:""})); }} className="ml-auto text-slate-400 hover:text-white">✕</button>
-                        </div>
-                      )}
-                      <input
-                        type="text"
-                        placeholder="Search city… e.g. Bangalore"
-                        value={startQuery}
-                        onChange={(e) => handleCitySearch(e.target.value, "start")}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white text-xs"
-                      />
-                      {startResults.length > 0 && (
-                        <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl max-h-40 overflow-y-auto">
-                          {startResults.map((r, i) => (
-                            <button key={i} type="button" onClick={() => handleSelectCity(r, "start")}
-                              className="w-full text-left px-3 py-2 text-[11px] text-slate-300 hover:bg-cyan-950/60 hover:text-white border-b border-slate-800 last:border-0 truncate">
-                              📍 {r.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {/* Hidden required fields */}
-                      <input type="hidden" name="start_lat" value={form.start_lat} required />
-                      <input type="hidden" name="start_lng" value={form.start_lng} required />
-                    </div>
-
-                    {/* End Location */}
-                    <div className="relative">
-                      <label className="text-slate-400 mb-1 block">🔴 End Location</label>
-                      {endLabel && (
-                        <div className="flex items-center gap-1 bg-rose-950/40 border border-rose-800 rounded-lg px-2 py-1 mb-1 text-[10px] text-rose-300">
-                          <span className="truncate">{endLabel}</span>
-                          <button type="button" onClick={() => { setEndLabel(""); setForm(p=>({...p,end_lat:"",end_lng:""})); }} className="ml-auto text-slate-400 hover:text-white">✕</button>
-                        </div>
-                      )}
-                      <input
-                        type="text"
-                        placeholder="Search city… e.g. Chennai"
-                        value={endQuery}
-                        onChange={(e) => handleCitySearch(e.target.value, "end")}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white text-xs"
-                      />
-                      {endResults.length > 0 && (
-                        <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl max-h-40 overflow-y-auto">
-                          {endResults.map((r, i) => (
-                            <button key={i} type="button" onClick={() => handleSelectCity(r, "end")}
-                              className="w-full text-left px-3 py-2 text-[11px] text-slate-300 hover:bg-rose-950/60 hover:text-white border-b border-slate-800 last:border-0 truncate">
-                              🏁 {r.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <input type="hidden" name="end_lat" value={form.end_lat} required />
-                      <input type="hidden" name="end_lng" value={form.end_lng} required />
-                    </div>
-                  </div>
-
-                  {/* Selected coordinates display */}
-                  {(form.start_lat || form.end_lat) && (
-                    <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                      {form.start_lat && (
-                        <div className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-400">
-                          Start: {Number(form.start_lat).toFixed(4)}, {Number(form.start_lng).toFixed(4)}
-                        </div>
-                      )}
-                      {form.end_lat && (
-                        <div className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-400">
-                          End: {Number(form.end_lat).toFixed(4)}, {Number(form.end_lng).toFixed(4)}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {!form.start_lat && <p className="text-amber-400 text-[10px]">⚠️ Please select a Start location above</p>}
-                  {form.start_lat && !form.end_lat && <p className="text-amber-400 text-[10px]">⚠️ Please select an End location above</p>}
                 </div>
 
-                {/* Route Strategy Selection */}
-                {routeOptions && (
-                  <div>
-                    <label className="text-cyan-400 font-semibold mb-1 block">Select Route Strategy Profile</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {Object.entries(routeOptions).map(([type, opt]) => (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => setSelectedRouteType(type)}
-                          className={`p-2.5 rounded-lg border text-left transition ${
-                            selectedRouteType === type
-                              ? "border-cyan-500 bg-cyan-950/60 text-white font-bold"
-                              : "border-slate-800 bg-slate-950 text-slate-400"
-                          }`}
+                {/* Start Location Input */}
+                <div className="relative">
+                  <label className="text-slate-400 mb-1 block">Start Location {startLabel && <span className="text-cyan-400 font-bold">({startLabel})</span>}</label>
+                  <input
+                    type="text"
+                    placeholder="Search start city..."
+                    value={startQuery}
+                    onChange={(e) => handleCitySearch(e.target.value, "start")}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+                  />
+                  {startResults.length > 0 && (
+                    <div className="absolute z-10 w-full bg-slate-900 border border-slate-700 rounded-lg mt-1 max-h-40 overflow-y-auto">
+                      {startResults.map((r, i) => (
+                        <div
+                          key={i}
+                          onClick={() => handleSelectCity(r, "start")}
+                          className="p-2 hover:bg-slate-800 cursor-pointer text-slate-300 text-[11px]"
                         >
-                          <p className="font-semibold text-xs">{opt.name}</p>
-                          <p className="text-[10px] text-slate-300">{opt.distance} km • {opt.duration} mins</p>
-                        </button>
+                          {r.name}
+                        </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Destination Input */}
+                <div className="relative">
+                  <label className="text-slate-400 mb-1 block">Destination {endLabel && <span className="text-cyan-400 font-bold">({endLabel})</span>}</label>
+                  <input
+                    type="text"
+                    placeholder="Search destination city..."
+                    value={endQuery}
+                    onChange={(e) => handleCitySearch(e.target.value, "end")}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+                  />
+                  {endResults.length > 0 && (
+                    <div className="absolute z-10 w-full bg-slate-900 border border-slate-700 rounded-lg mt-1 max-h-40 overflow-y-auto">
+                      {endResults.map((r, i) => (
+                        <div
+                          key={i}
+                          onClick={() => handleSelectCity(r, "end")}
+                          className="p-2 hover:bg-slate-800 cursor-pointer text-slate-300 text-[11px]"
+                        >
+                          {r.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* CALCULATE ROUTE BUTTON */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleCalculateRoute()}
+                    disabled={calculatingRoute}
+                    className="w-full py-2 bg-purple-950/80 hover:bg-purple-900 border border-purple-700 text-purple-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition disabled:opacity-50"
+                  >
+                    <span>⚡ CALCULATE ROUTE OPTIONS</span>
+                    {calculatingRoute && <span className="animate-spin">🌀</span>}
+                  </button>
+                </div>
+
+                {/* Route Options Preview */}
+                {routeOptions && (
+                  <div className="bg-slate-950 border border-cyan-500/40 rounded-xl p-3 space-y-2">
+                    <p className="font-bold text-cyan-400 text-xs flex justify-between items-center">
+                      <span>🗺️ ROUTE OPTIMIZATION STRATEGIES</span>
+                      <span className="text-[10px] text-slate-400">Click card to select strategy</span>
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(routeOptions).map(([type, opt]) => {
+                        const isSelected = selectedRouteType === type;
+                        return (
+                          <div
+                            key={type}
+                            onClick={() => setSelectedRouteType(type)}
+                            className={`p-2.5 rounded-xl border cursor-pointer transition space-y-1 ${
+                              isSelected
+                                ? "border-cyan-500 bg-cyan-950/50 text-cyan-200 shadow-md shadow-cyan-500/20"
+                                : "border-slate-800 bg-slate-900 hover:border-slate-700 text-slate-300"
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <p className="font-bold text-[11px] text-white uppercase">{opt.name}</p>
+                              {isSelected && <span className="text-cyan-400 text-[10px]">✔ SELECTED</span>}
+                            </div>
+                            <div className="text-[10px] space-y-0.5 font-mono">
+                              <p>📏 Distance: <strong className="text-white">{opt.distance} km</strong></p>
+                              <p>⏱️ Duration: <strong className="text-white">{formatDuration(opt.duration)}</strong></p>
+                              <p>🕒 Est. ETA: <strong className="text-cyan-300">{formatETA(opt)}</strong></p>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {error && <p className="text-red-400 text-xs">{error}</p>}
-
-                <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                   <button
                     type="button"
                     onClick={() => setShowForm(false)}
-                    className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300"
+                    className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-cyan-500 text-slate-950 font-bold rounded-lg hover:bg-cyan-400"
+                    className="px-4 py-2 bg-cyan-500 text-slate-950 font-bold rounded-xl hover:bg-cyan-400"
                   >
-                    Schedule Trip
+                    Schedule & Create Trip
                   </button>
                 </div>
               </form>

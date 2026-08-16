@@ -10,4 +10,5 @@ export const getShipmentAlerts = () => api.get("/shipments/alerts");
 export const updateShipmentStatus = (id, data) => api.post(`/shipments/${id}/status`, data);
 export const cancelShipment = (id) => api.post(`/shipments/${id}/cancel`);
 export const getUsers = () => api.get("/auth/users");
+export const getDrivers = () => api.get("/drivers/");
 

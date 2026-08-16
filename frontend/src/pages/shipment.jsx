@@ -9,13 +9,14 @@ import {
   deleteShipment,
   getShipmentAlerts,
   getUsers,
+  getDrivers,
 } from "../api/shipments";
 import { getVehicles } from "../api/vehicles";
 
 const emptyForm = {
   tracking_number: "",
   source: "Kakinada",
-  destination: "Vijayawada",
+  destination: "Hyderabad",
   customer_name: "",
   customer_phone: "",
   customer_email: "",
@@ -48,6 +49,7 @@ export default function Shipments() {
   const [shipments, setShipments] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [usersList, setUsersList] = useState([]);
+  const [driversList, setDriversList] = useState([]);   // driver_id → full_name
   const [alerts, setAlerts] = useState([]);
   const [selectedShipment, setSelectedShipment] = useState(null);
   
@@ -63,17 +65,19 @@ export default function Shipments() {
 
   const loadData = async () => {
     try {
-      const [shipRes, alertRes, vehRes, usersRes] = await Promise.all([
+      const [shipRes, alertRes, vehRes, usersRes, driversRes] = await Promise.all([
         getShipments(),
         getShipmentAlerts().catch(() => ({ data: [] })),
         getVehicles().catch(() => ({ data: [] })),
         getUsers().catch(() => ({ data: [] })),
+        getDrivers().catch(() => ({ data: [] })),
       ]);
       const shipData = shipRes.data || [];
       setShipments(shipData);
       setAlerts(alertRes.data || []);
       setVehicles(vehRes.data || []);
       setUsersList(usersRes.data || []);
+      setDriversList(driversRes.data || []);
 
       if (shipData.length > 0 && !selectedShipment) {
         setSelectedShipment(shipData[0]);
@@ -91,11 +95,21 @@ export default function Shipments() {
   const vehicleMap = {};
   vehicles.forEach((v) => {
     vehicleMap[v.vehicle_id] = v.brand ? `${v.brand} (${v.registration_number})` : v.registration_number;
+    vehicleMap[String(v.vehicle_id)] = vehicleMap[v.vehicle_id];
   });
 
+  // userMap: user_id → full_name (for dropdowns, etc.)
   const userMap = {};
   usersList.forEach((u) => {
     userMap[u.user_id] = u.full_name;
+    userMap[String(u.user_id)] = u.full_name;
+  });
+
+  // driverMap: driver_id → full_name  ← the correct map for shipment.driver_id
+  const driverMap = {};
+  driversList.forEach((d) => {
+    driverMap[d.driver_id] = d.full_name;
+    driverMap[String(d.driver_id)] = d.full_name;
   });
 
   const filteredShipments = shipments.filter((s) => {
@@ -145,6 +159,18 @@ export default function Shipments() {
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    const sTrim = (form.source || "").trim();
+    const dTrim = (form.destination || "").trim();
+    if (sTrim.length <= 2) {
+      setError(`Please specify a real city/location for Source (e.g. Kakinada, Vijayawada), not just a state code like "${sTrim}".`);
+      return;
+    }
+    if (dTrim.length <= 2) {
+      setError(`Please specify a real city/location for Destination (e.g. Hyderabad), not just a state code like "${dTrim}".`);
+      return;
+    }
+
     setActionLoading(true);
     try {
       const payload = {
@@ -179,6 +205,18 @@ export default function Shipments() {
     e.preventDefault();
     if (!editingShipment) return;
     setError("");
+
+    const sTrim = (form.source || "").trim();
+    const dTrim = (form.destination || "").trim();
+    if (sTrim.length <= 2) {
+      setError(`Please specify a real city/location for Source (e.g. Kakinada, Vijayawada), not just a state code like "${sTrim}".`);
+      return;
+    }
+    if (dTrim.length <= 2) {
+      setError(`Please specify a real city/location for Destination (e.g. Hyderabad), not just a state code like "${dTrim}".`);
+      return;
+    }
+
     setActionLoading(true);
     try {
       const payload = {
@@ -355,8 +393,12 @@ export default function Shipments() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredShipments.map((s) => {
                 const isSelected = selectedShipment?.shipment_id === s.shipment_id;
-                const assignedVehicleStr = s.vehicle_id ? (vehicleMap[s.vehicle_id] || "KIA") : "KIA";
-                const assignedDriverStr = s.driver_id ? (userMap[s.driver_id] || "VOONNA PAVAN KRISHNA") : "VOONNA PAVAN KRISHNA";
+                const assignedVehicleStr = s.vehicle_id
+                  ? (vehicleMap[s.vehicle_id] || vehicleMap[String(s.vehicle_id)] || `Vehicle #${String(s.vehicle_id).slice(0, 8)}...`)
+                  : "Not Assigned";
+                const assignedDriverStr = s.driver_id
+                  ? (driverMap[s.driver_id] || driverMap[String(s.driver_id)] || `Driver #${String(s.driver_id).slice(0, 8)}...`)
+                  : "Not Assigned";
 
                 return (
                   <div
@@ -416,7 +458,7 @@ export default function Shipments() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate("/trips");
+                          navigate("/trips", { state: { shipmentId: s.shipment_id } });
                         }}
                         className="px-3.5 py-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
                       >
@@ -485,6 +527,12 @@ export default function Shipments() {
                     </p>
                   </div>
 
+                  {selectedShipment.source?.trim().length <= 2 && (
+                    <div className="p-2.5 bg-amber-950/60 border border-amber-700/60 rounded-xl text-amber-300 text-[11px]">
+                      ⚠️ Source &quot;{selectedShipment.source}&quot; is incomplete. Please click <strong>[EDIT]</strong> above to update with a specific city name (e.g. Kakinada, Vijayawada).
+                    </div>
+                  )}
+
                   {/* Customer & Mass */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -514,13 +562,17 @@ export default function Shipments() {
                     <div>
                       <p className="text-[10px] text-slate-500 uppercase tracking-widest">ASSIGNED VEHICLE</p>
                       <p className="text-white font-bold mt-0.5">
-                        {selectedShipment.vehicle_id ? (vehicleMap[selectedShipment.vehicle_id] || "KIA") : "KIA"}
+                        {selectedShipment.vehicle_id
+                          ? (vehicleMap[selectedShipment.vehicle_id] || vehicleMap[String(selectedShipment.vehicle_id)] || `Vehicle #${String(selectedShipment.vehicle_id).slice(0, 8)}...`)
+                          : "Not Assigned"}
                       </p>
                     </div>
                     <div>
                       <p className="text-[10px] text-slate-500 uppercase tracking-widest">ASSIGNED DRIVER</p>
                       <p className="text-white font-bold mt-0.5">
-                        {selectedShipment.driver_id ? (userMap[selectedShipment.driver_id] || "VOONNA PAVAN KRISHNA") : "VOONNA PAVAN KRISHNA"}
+                        {selectedShipment.driver_id
+                          ? (driverMap[selectedShipment.driver_id] || driverMap[String(selectedShipment.driver_id)] || `Driver #${String(selectedShipment.driver_id).slice(0, 8)}...`)
+                          : "Not Assigned"}
                       </p>
                     </div>
                   </div>
@@ -789,7 +841,7 @@ export default function Shipments() {
                     value={form.source}
                     onChange={handleChange}
                     required
-                    placeholder="KOLLAM"
+                    placeholder="KAKINADA"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white font-mono uppercase focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
@@ -802,7 +854,7 @@ export default function Shipments() {
                     value={form.destination}
                     onChange={handleChange}
                     required
-                    placeholder="SRIKAKULAM"
+                    placeholder="HYDERABAD"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white font-mono uppercase focus:border-cyan-500 focus:outline-none"
                   />
                 </div>

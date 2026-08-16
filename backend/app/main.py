@@ -1,7 +1,7 @@
 import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, vehicle, shipment, trip, gps_tracking, tracking_ws
+from app.routers import auth, vehicle, shipment, trip, gps_tracking, tracking_ws, driver, maintenance, fuel_record
 
 app = FastAPI(title="FleetFlow API")
 
@@ -23,6 +23,9 @@ app.include_router(auth.router, prefix="/auth", tags=["Aunthentication"])
 app.include_router(vehicle.router, prefix="/vehicles", tags=["Vehicles"])
 app.include_router(shipment.router, prefix="/shipments", tags=["Shipments"])
 app.include_router(trip.router, prefix="/trips", tags=["Trips"])
+app.include_router(driver.router, prefix="/drivers", tags=["Drivers"])
+app.include_router(maintenance.router, prefix="/maintenance", tags=["Maintenance"])
+app.include_router(fuel_record.router, prefix="/fuel", tags=["Fuel"])
 app.include_router(gps_tracking.router, prefix="/gps", tags=["GPS"])
 app.include_router(tracking_ws.router, tags=["Live Tracking"])
 

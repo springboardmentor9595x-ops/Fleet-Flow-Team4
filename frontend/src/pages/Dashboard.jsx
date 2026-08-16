@@ -115,8 +115,10 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6 text-white">
-      <div className="flex justify-between items-center mb-6">
+    <div className="flex min-h-screen bg-[#020617] text-white font-sans overflow-x-hidden">
+      <Sidebar />
+      <main className="flex-1 p-8 space-y-6 overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
         <div>
           <p className="text-cyan-400 text-xs tracking-widest uppercase mb-1">
             Fleet Logistics
@@ -336,6 +338,7 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+      </main>
     </div>
   );
 }

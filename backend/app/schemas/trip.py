@@ -52,10 +52,14 @@ class TripUpdate(BaseModel):
     end_time: datetime | None = None
 
 
+from app.schemas.shipment import ShipmentResponse
+
+
 class TripResponse(TripBase):
     trip_id: UUID
     created_at: datetime
     updated_at: datetime
+    shipment: Optional[ShipmentResponse] = None
 
     class Config:
         from_attributes = True

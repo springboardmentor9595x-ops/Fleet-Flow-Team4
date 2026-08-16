@@ -21,15 +21,16 @@ export default function Sidebar() {
   const navItems = [
     { label: "Live Tracking", path: "/trips", icon: "🌐" },
     { label: "Shipments", path: "/shipments", icon: "📦" },
-    { label: "Vehicles", path: "/dashboard", icon: "🚚" },
+    { label: "Vehicles", path: "/vehicles", icon: "🚚" },
     { label: "Trips", path: "/trips", icon: "🗺️" },
-    { label: "Drivers", path: "/dashboard", icon: "👤" },
-    { label: "Maintenance", path: "/dashboard", icon: "🛠️" },
+    { label: "Drivers", path: "/drivers", icon: "👤" },
+    { label: "Maintenance", path: "/maintenance", icon: "🛠️" },
+    { label: "Fuel Refills", path: "/fuel", icon: "⛽" },
   ];
 
-  const displayName = user?.full_name?.toUpperCase() || "VOONNA PAVAN KRISHNA";
-  const displayRole = user?.role?.toUpperCase() || "FLEET MANAGER";
-  const initial = displayName.charAt(0) || "V";
+  const displayName = (user?.full_name || user?.email?.split("@")[0] || "OPERATOR").toUpperCase();
+  const displayRole = (user?.role || "ADMIN").toUpperCase();
+  const initial = displayName.charAt(0) || "F";
 
   return (
     <aside className="w-64 min-h-screen bg-[#020617] border-r border-slate-800/80 flex flex-col justify-between p-5 flex-shrink-0 select-none">
@@ -52,7 +53,7 @@ export default function Sidebar() {
         {/* Navigation Menu */}
         <nav className="space-y-1.5">
           {navItems.map((item, idx) => {
-            const isActive = location.pathname === item.path && (item.label === "Shipments" ? location.pathname === "/shipments" : true);
+            const isActive = location.pathname === item.path;
             return (
               <Link
                 key={idx}

@@ -125,7 +125,9 @@ def list_trips(
     """Retrieve all trips with optional status filter, scoped by role."""
     driver_id = None
     if current_user.role == RoleEnum.Driver:
-        driver_id = current_user.user_id
+        from app.models.driver import Driver
+        drv = db.query(Driver).filter(Driver.user_id == current_user.user_id).first()
+        driver_id = drv.driver_id if drv else current_user.user_id
 
     return trip_crud.get_trips(
         db, skip=skip, limit=limit, status=trip_status, driver_id=driver_id
@@ -211,11 +213,15 @@ def start_trip(
             detail=f"Trip with ID '{trip_id}' not found.",
         )
 
-    if current_user.role == RoleEnum.Driver and trip.driver_id != current_user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not authorized to start this trip.",
-        )
+    if current_user.role == RoleEnum.Driver:
+        from app.models.driver import Driver
+        drv = db.query(Driver).filter(Driver.user_id == current_user.user_id).first()
+        driver_id = drv.driver_id if drv else current_user.user_id
+        if trip.driver_id != driver_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to start this trip.",
+            )
 
     if trip.status != TripStatusEnum.Scheduled:
         raise HTTPException(
@@ -264,11 +270,15 @@ def complete_trip(
             detail=f"Trip with ID '{trip_id}' not found.",
         )
 
-    if current_user.role == RoleEnum.Driver and trip.driver_id != current_user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not authorized to complete this trip.",
-        )
+    if current_user.role == RoleEnum.Driver:
+        from app.models.driver import Driver
+        drv = db.query(Driver).filter(Driver.user_id == current_user.user_id).first()
+        driver_id = drv.driver_id if drv else current_user.user_id
+        if trip.driver_id != driver_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to complete this trip.",
+            )
 
     if trip.status != TripStatusEnum.Active:
         raise HTTPException(

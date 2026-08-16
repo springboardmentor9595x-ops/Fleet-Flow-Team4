@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     SMTP_USE_SSL: bool = False
     APP_BASE_URL: str = "http://localhost:3000"
+    ADMIN_EMAIL: str = "admin@example.com"
 
     @field_validator("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", mode="before")
     @classmethod

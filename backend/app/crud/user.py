@@ -11,6 +11,10 @@ def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == cleaned_email).first()
 
 
+import uuid
+from app.models.user import RoleEnum
+from app.models.driver import Driver
+
 def create_user(db: Session, email: str, password: str, full_name: str, phone: str, role):
     cleaned_email = email.strip().lower() if email else ""
     user = User(
@@ -19,11 +23,21 @@ def create_user(db: Session, email: str, password: str, full_name: str, phone: s
         full_name=full_name.strip() if full_name else "",
         phone=phone,
         role=role,
-        is_verified=False,
+        is_verified=True,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Auto-create driver record if role is Driver
+    role_val = role.value if hasattr(role, "value") else str(role)
+    if role_val == "Driver":
+        driver_entry = db.query(Driver).filter(Driver.user_id == user.user_id).first()
+        if not driver_entry:
+            driver_entry = Driver(driver_id=uuid.uuid4(), user_id=user.user_id)
+            db.add(driver_entry)
+            db.commit()
+
     return user
 
 

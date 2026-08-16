@@ -10,6 +10,9 @@ import VerifyOtp from "./pages/VerifyOtp";
 import Dashboard from "./pages/Dashboard";
 import Shipments from "./pages/shipment";
 import Trips from "./pages/Trips";
+import Drivers from "./pages/Drivers";
+import Maintenance from "./pages/Maintenance";
+import FuelRefills from "./pages/FuelRefills";
 
 export default function App() {
   return (
@@ -26,8 +29,13 @@ export default function App() {
             {/* Protected Routes */}
             <Route element={<ProtectedRoute />}>
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/vehicles" element={<Dashboard />} />
               <Route path="/shipments" element={<Shipments />} />
               <Route path="/trips" element={<Trips />} />
+              <Route path="/tracking" element={<Trips />} />
+              <Route path="/drivers" element={<Drivers />} />
+              <Route path="/maintenance" element={<Maintenance />} />
+              <Route path="/fuel" element={<FuelRefills />} />
             </Route>
 
             {/* Default Route */}

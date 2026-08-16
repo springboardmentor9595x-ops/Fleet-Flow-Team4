@@ -16,7 +16,7 @@ def test_complete_milestone2_e2e_workflow():
     db = SessionLocal()
     try:
         # Create test admin user in DB with is_verified=True
-        admin_email = f"admin_{uuid.uuid4().hex[:6]}@fleetflow.com"
+        admin_email = os.getenv("ADMIN_EMAIL", f"admin_{uuid.uuid4().hex[:6]}@example.com")
         admin = User(
             email=admin_email,
             password=hash_password("admin123"),
