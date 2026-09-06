@@ -34,6 +34,7 @@ class VehicleUpdate(BaseModel):
 
 class VehicleResponse(VehicleBase):
     vehicle_id: UUID
+    assigned_driver_name: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

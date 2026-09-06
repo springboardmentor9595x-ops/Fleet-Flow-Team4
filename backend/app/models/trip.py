@@ -6,9 +6,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
 
 
-from sqlalchemy.orm import relationship
-
-
 class TripStatusEnum(str, enum.Enum):
     Scheduled = "Scheduled"
     Active = "Active"
@@ -24,8 +21,6 @@ class Trip(Base):
     driver_id = Column(UUID(as_uuid=True), ForeignKey("drivers.driver_id"), nullable=True)
     shipment_id = Column(UUID(as_uuid=True), ForeignKey("shipments.shipment_id"), nullable=True)
     
-    shipment = relationship("Shipment", foreign_keys=[shipment_id], lazy="joined")
-
     status = Column(
         Enum(TripStatusEnum, name="trip_status_enum"),
         nullable=False,

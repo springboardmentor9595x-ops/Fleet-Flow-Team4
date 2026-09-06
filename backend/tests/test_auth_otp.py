@@ -39,7 +39,6 @@ def test_verification_code_is_accepted_and_cleared():
 
 
 def test_unverified_user_signup_retry():
-    from fastapi import BackgroundTasks
     from fastapi import HTTPException
     import pytest
     from app.schemas.user import UserCreate
@@ -58,8 +57,7 @@ def test_unverified_user_signup_retry():
             phone="111",
             role=RoleEnum.Driver
         )
-        bg = BackgroundTasks()
-        res1 = signup(user_in, bg, session)
+        res1 = signup(user_in, session)
         assert res1.email == "retry@example.com"
         assert res1.full_name == "First Attempt"
         assert res1.is_verified is False
@@ -72,7 +70,7 @@ def test_unverified_user_signup_retry():
             phone="222",
             role=RoleEnum.Driver
         )
-        res2 = signup(user_in2, bg, session)
+        res2 = signup(user_in2, session)
         assert res2.email == "retry@example.com"
         assert res2.full_name == "Second Attempt"
         assert res2.is_verified is False
@@ -89,13 +87,12 @@ def test_unverified_user_signup_retry():
             role=RoleEnum.Driver
         )
         with pytest.raises(HTTPException) as excinfo:
-            signup(user_in3, bg, session)
+            signup(user_in3, session)
         assert excinfo.value.status_code == 400
         assert excinfo.value.detail == "Email already registered"
 
 
 def test_signup_preserves_unverified_state_when_verification_email_fails(monkeypatch):
-    from fastapi import BackgroundTasks
     from app.routers.auth import signup
     from app.schemas.user import UserCreate
     import app.routers.auth as auth_router
@@ -117,7 +114,7 @@ def test_signup_preserves_unverified_state_when_verification_email_fails(monkeyp
             phone="999",
             role=RoleEnum.Driver,
         )
-        res = signup(user_in, BackgroundTasks(), session)
+        res = signup(user_in, session)
         assert res.email == "fallback@example.com"
 
         session.expire_all()
@@ -128,7 +125,6 @@ def test_signup_preserves_unverified_state_when_verification_email_fails(monkeyp
 
 
 def test_password_normalization_commits():
-    from fastapi import BackgroundTasks
     from fastapi.security import OAuth2PasswordRequestForm
     from app.routers.auth import login
     from app.core.security import verify_password
@@ -150,7 +146,6 @@ def test_password_normalization_commits():
         session.add(user)
         session.commit()
 
-        bg = BackgroundTasks()
         form_data = OAuth2PasswordRequestForm(
             username="plaintext@example.com",
             password="plain_password",
@@ -160,7 +155,7 @@ def test_password_normalization_commits():
             grant_type="password"
         )
         # Login should trigger password normalization and hashing
-        res = login(bg, form_data, session)
+        res = login(form_data, session)
         assert res["access_token"] is not None
 
         # Verify that database password is now hashed (not plaintext anymore)

@@ -11,6 +11,7 @@ from sqlalchemy import (
     Enum,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -94,3 +95,5 @@ class Vehicle(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow
     )
+
+    maintenances = relationship("Maintenance", back_populates="vehicle", cascade="all, delete-orphan")

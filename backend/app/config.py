@@ -19,14 +19,17 @@ class Settings(BaseSettings):
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587
     SMTP_USER: str | None = None
+    SMTP_USERNAME: str | None = None
     SMTP_PASSWORD: str | None = None
     SMTP_FROM: str | None = None
+    SMTP_FROM_EMAIL: str | None = None
+    SMTP_FROM_NAME: str | None = "Fleet Manager"
     SMTP_USE_TLS: bool = True
     SMTP_USE_SSL: bool = False
     APP_BASE_URL: str = "http://localhost:3000"
     ADMIN_EMAIL: str = "admin@example.com"
 
-    @field_validator("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", mode="before")
+    @field_validator("SMTP_HOST", "SMTP_USER", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_EMAIL", "SMTP_FROM_NAME", mode="before")
     @classmethod
     def strip_surrounding_quotes(cls, value):
         if isinstance(value, str):
@@ -34,6 +37,7 @@ class Settings(BaseSettings):
             if len(value) >= 2 and value[0] == value[-1] and value[0] in {"\"", "'"}:
                 return value[1:-1]
         return value
+
 
 
 settings = Settings()

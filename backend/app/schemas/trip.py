@@ -21,6 +21,13 @@ class TripBase(BaseModel):
     route_type: str | None = "fastest"
     start_time: datetime | None = None
     end_time: datetime | None = None
+    origin: str | None = None
+    destination: str | None = None
+    tracking_number: str | None = None
+    customer_name: str | None = None
+    assigned_vehicle_reg: str | None = None
+    assigned_vehicle_model: str | None = None
+    assigned_driver_name: str | None = None
 
 
 class TripCreate(BaseModel):
@@ -52,14 +59,10 @@ class TripUpdate(BaseModel):
     end_time: datetime | None = None
 
 
-from app.schemas.shipment import ShipmentResponse
-
-
 class TripResponse(TripBase):
     trip_id: UUID
     created_at: datetime
     updated_at: datetime
-    shipment: Optional[ShipmentResponse] = None
 
     class Config:
         from_attributes = True

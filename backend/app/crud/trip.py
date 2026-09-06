@@ -35,7 +35,7 @@ def get_trips(
         query = query.filter(Trip.driver_id == driver_id)
     if vehicle_id is not None:
         query = query.filter(Trip.vehicle_id == vehicle_id)
-    return query.offset(skip).limit(limit).all()
+    return query.order_by(Trip.created_at.desc()).offset(skip).limit(limit).all()
 
 
 def update_trip(db: Session, trip_db: Trip, trip_in: TripUpdate) -> Trip:

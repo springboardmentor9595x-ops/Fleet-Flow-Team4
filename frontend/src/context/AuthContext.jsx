@@ -42,15 +42,20 @@ export function AuthProvider({ children }) {
     form.append("username", email.trim());
     form.append("password", password);
 
-    const response = await api.post("/auth/login", form, {
+    const response = await api.post("/auth/login", form.toString(), {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
 
     const newToken = response.data.access_token;
     localStorage.setItem("token", newToken);
+    if (api.defaults.headers.common) {
+      api.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
+    }
     setToken(newToken);
 
-    const me = await api.get("/auth/me");
+    const me = await api.get("/auth/me", {
+      headers: { Authorization: `Bearer ${newToken}` },
+    });
     setUser(me.data);
     return me.data;
   };
@@ -79,8 +84,18 @@ export function AuthProvider({ children }) {
     logout();
   };
 
+  const forgotPassword = async (email) => {
+    const response = await api.post("/auth/forgot-password", { email });
+    return response.data;
+  };
+
+  const resetPassword = async (email, otp, new_password) => {
+    const response = await api.post("/auth/reset-password", { email, otp, new_password });
+    return response.data;
+  };
+
   const value = useMemo(
-    () => ({ user, token, loading, login, signup, verifyOtp, resendOtp, logout, deleteAccount }),
+    () => ({ user, token, loading, login, signup, verifyOtp, resendOtp, logout, deleteAccount, forgotPassword, resetPassword }),
     [user, token, loading]
   );
 

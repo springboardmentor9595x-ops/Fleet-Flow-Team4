@@ -1,6 +1,11 @@
-.env
+﻿.env
+.env.local
+.env.*.local
 backend/.env
 frontend/.env
 __pycache__/
 *.pyc
 node_modules/
+dist/
+postgres_data/
+redis_data/

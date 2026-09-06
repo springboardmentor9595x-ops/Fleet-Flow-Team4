@@ -42,6 +42,34 @@ def send_verification_email(recipient: str, full_name: str, otp: str, app_url: O
         return False
 
 
+def send_password_reset_email(recipient: str, full_name: str, otp: str) -> bool:
+    subject = "Reset your FleetFlow password"
+    body = (
+        f"Hello {full_name},\n\n"
+        "We received a request to reset your password for FleetFlow. Use the verification code below to set your new password:\n\n"
+        f"Reset Code (OTP): {otp}\n\n"
+        "This code will expire in 10 minutes.\n\n"
+        "If you did not request a password reset, please ignore this email.\n\n"
+        "Best regards,\nFleetFlow Team"
+    )
+    html = (
+        f"<p>Hello {full_name},</p>"
+        "<p>We received a request to reset your password for <strong>FleetFlow</strong>. Use the verification code below to set your new password:</p>"
+        f"<p style=\"font-size: 24px; font-weight: bold; letter-spacing: 4px; color: #6C63FF;\">{otp}</p>"
+        "<p>This code will expire in 10 minutes.</p>"
+        "<p>If you did not request a password reset, you can safely ignore this email.</p>"
+        "<p>Best regards,<br/>FleetFlow Team</p>"
+    )
+
+    try:
+        send_email(subject=subject, recipient=recipient, body=body, html=html)
+        return True
+    except Exception as exc:
+        _log_verification_fallback(recipient=recipient, otp=otp, subject=subject)
+        logger.exception("Email delivery failed, using OTP fallback: %s", exc)
+        return False
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,12 +84,16 @@ def _log_verification_fallback(recipient: str, otp: str, subject: str) -> None:
 
 
 def send_email(subject: str, recipient: str, body: str, html: Optional[str] = None) -> None:
-    if not settings.SMTP_HOST or not settings.SMTP_USER or not settings.SMTP_PASSWORD or not settings.SMTP_FROM:
-        raise RuntimeError("SMTP settings are not configured.")
+    smtp_user = settings.SMTP_USERNAME or settings.SMTP_USER
+    smtp_from = settings.SMTP_FROM_EMAIL or settings.SMTP_FROM or smtp_user
+    smtp_from_name = settings.SMTP_FROM_NAME or "Fleet Manager"
+
+    if not settings.SMTP_HOST or not smtp_user or not settings.SMTP_PASSWORD or not smtp_from:
+        raise RuntimeError("SMTP settings are not configured properly.")
 
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = settings.SMTP_FROM
+    message["From"] = f"{smtp_from_name} <{smtp_from}>" if smtp_from_name else smtp_from
     message["To"] = recipient
     message.set_content(body)
 
@@ -72,12 +104,14 @@ def send_email(subject: str, recipient: str, body: str, html: Optional[str] = No
     context = ssl.create_default_context()
 
     if settings.SMTP_USE_SSL:
-        with smtplib.SMTP_SSL(settings.SMTP_HOST, port, context=context) as server:
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        with smtplib.SMTP_SSL(settings.SMTP_HOST, port, context=context, timeout=10) as server:
+            server.login(smtp_user, settings.SMTP_PASSWORD)
             server.send_message(message)
     else:
-        with smtplib.SMTP(settings.SMTP_HOST, port) as server:
+        with smtplib.SMTP(settings.SMTP_HOST, port, timeout=10) as server:
             if settings.SMTP_USE_TLS:
                 server.starttls(context=context)
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.login(smtp_user, settings.SMTP_PASSWORD)
             server.send_message(message)
+
+

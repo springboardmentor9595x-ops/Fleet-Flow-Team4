@@ -6,13 +6,19 @@ import { useAuth } from "../context/AuthContext";
 export default function Signup() {
   const { signup } = useAuth();
   const navigate = useNavigate();
+
   const [form, setForm] = useState({
-    email: "",
-    password: "",
     full_name: "",
     phone: "",
-    role: "Driver",
+    address: "",
+    email: "",
+    role: "FleetManager",
+    password: "",
+    confirmPassword: "",
   });
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,14 +27,56 @@ export default function Signup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    // 1. Required field validations
+    if (!form.full_name.trim()) {
+      setError("Full Name is required.");
+      return;
+    }
+    if (!form.phone.trim()) {
+      setError("Phone Number is required.");
+      return;
+    }
+    const phoneClean = form.phone.replace(/[\s\-]/g, "");
+    if (!/^\+?[0-9]{7,15}$/.test(phoneClean)) {
+      setError("Please enter a valid phone number (e.g. +91 9876543210).");
+      return;
+    }
+    if (!form.address.trim()) {
+      setError("Address is required.");
+      return;
+    }
+    if (!form.email.trim()) {
+      setError("Email Address is required.");
+      return;
+    }
+    if (form.password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError("Password and Confirm Password do not match.");
+      return;
+    }
+
     setLoading(true);
     try {
-      await signup(form);
-      localStorage.setItem("pendingVerificationEmail", form.email);
-      toast.success("Account created! Check your email for the OTP.");
-      navigate("/verify-otp", { state: { email: form.email } });
+      const payload = {
+        full_name: form.full_name.trim(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        email: form.email.trim().toLowerCase(),
+        role: form.role,
+        password: form.password,
+        confirm_password: form.confirmPassword,
+      };
+
+      await signup(payload);
+      localStorage.setItem("pendingVerificationEmail", form.email.trim().toLowerCase());
+      toast.success("Verification code sent to your email!");
+      navigate("/verify-otp", { state: { email: form.email.trim().toLowerCase() } });
     } catch (err) {
-      const message = err.response?.data?.detail || "Signup failed";
+      const message = err.response?.data?.detail || "Registration failed. Please check your inputs.";
       setError(message);
       toast.error(message);
     } finally {
@@ -37,100 +85,174 @@ export default function Signup() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/80 p-8 shadow-2xl shadow-slate-950/50">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10">
-            <svg className="h-7 w-7 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-            </svg>
+    <div className="flex min-h-screen items-center justify-center bg-[#F0FDFA] px-4 py-12 font-sans">
+      <div className="w-full max-w-lg rounded-2xl bg-white border border-[#E5E7EB] p-8 shadow-xl">
+        {/* Brand Logo & Title */}
+        <div className="text-center mb-6">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0F766E] text-white font-black text-2xl shadow-md shadow-[#0F766E]/20">
+            F
           </div>
-          <h2 className="text-3xl font-semibold text-white">Create your account</h2>
-          <p className="mt-2 text-sm text-slate-400">Join FleetFlow to manage your fleet</p>
+          <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight">
+            Create FleetFlow Account
+          </h1>
+          <p className="text-xs text-[#6B7280] mt-1">
+            Register your profile to access fleet & logistics management
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">Full Name</label>
+            <label className="block font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider text-[11px] font-mono">
+              Full Name *
+            </label>
             <input
               name="full_name"
               value={form.full_name}
               onChange={handleChange}
               required
-              placeholder="John Doe"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-600 focus:border-cyan-400"
+              placeholder="e.g. Sarah Jenkins"
+              className="w-full rounded-xl border border-[#E5E7EB] bg-[#F0FDFA] px-4 py-2.5 text-[#1F2937] placeholder-[#6B7280] focus:bg-white focus:outline-none focus:border-[#0F766E] transition font-mono"
             />
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label className="block font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider text-[11px] font-mono">
+                Email Address *
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={form.email}
+                onChange={handleChange}
+                required
+                placeholder="name@company.com"
+                className="w-full rounded-xl border border-[#E5E7EB] bg-[#F0FDFA] px-4 py-2.5 text-[#1F2937] placeholder-[#6B7280] focus:bg-white focus:outline-none focus:border-[#0F766E] transition font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider text-[11px] font-mono">
+                Phone Number *
+              </label>
+              <input
+                name="phone"
+                value={form.phone}
+                onChange={handleChange}
+                required
+                placeholder="+91 9876543210"
+                className="w-full rounded-xl border border-[#E5E7EB] bg-[#F0FDFA] px-4 py-2.5 text-[#1F2937] placeholder-[#6B7280] focus:bg-white focus:outline-none focus:border-[#0F766E] transition font-mono"
+              />
+            </div>
+          </div>
+
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">Email</label>
+            <label className="block font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider text-[11px] font-mono">
+              Address *
+            </label>
             <input
-              type="email"
-              name="email"
-              value={form.email}
+              name="address"
+              value={form.address}
               onChange={handleChange}
               required
-              placeholder="you@company.com"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-600 focus:border-cyan-400"
+              placeholder="e.g. 124 Logistics Park, Sector 5"
+              className="w-full rounded-xl border border-[#E5E7EB] bg-[#F0FDFA] px-4 py-2.5 text-[#1F2937] placeholder-[#6B7280] focus:bg-white focus:outline-none focus:border-[#0F766E] transition font-mono"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">Password</label>
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={handleChange}
-              required
-              placeholder="••••••••"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-600 focus:border-cyan-400"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">Phone</label>
-            <input
-              name="phone"
-              value={form.phone}
-              onChange={handleChange}
-              placeholder="9876543210"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-600 focus:border-cyan-400"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">Role</label>
+            <label className="block font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider text-[11px] font-mono">
+              Role *
+            </label>
             <select
               name="role"
               value={form.role}
               onChange={handleChange}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400"
+              className="w-full rounded-xl border border-[#E5E7EB] bg-[#F0FDFA] px-4 py-2.5 text-[#1F2937] focus:bg-white focus:outline-none focus:border-[#0F766E] transition font-mono font-medium"
             >
-              <option value="Admin">Admin</option>
-              <option value="FleetManager">Fleet Manager</option>
-              <option value="Driver">Driver</option>
-              <option value="Dispatcher">Dispatcher</option>
+              <option value="FleetManager">Fleet Manager (Fleet & Asset Ops)</option>
+              <option value="Dispatcher">Dispatcher (Logistics & Shipments)</option>
+              <option value="Driver">Driver (Field Transit Operations)</option>
+              <option value="Admin">Administrator (Full Access)</option>
             </select>
           </div>
 
-          {error ? <p className="text-sm text-rose-400">{error}</p> : null}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label className="block font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider text-[11px] font-mono">
+                Password *
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={form.password}
+                  onChange={handleChange}
+                  required
+                  placeholder="Min 6 chars"
+                  className="w-full rounded-xl border border-[#E5E7EB] bg-[#F0FDFA] px-4 py-2.5 pr-11 text-[#1F2937] placeholder-[#6B7280] focus:bg-white focus:outline-none focus:border-[#0F766E] transition font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#1F2937] transition p-1 text-sm select-none"
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? "👁️" : "🙈"}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider text-[11px] font-mono">
+                Confirm Password *
+              </label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  name="confirmPassword"
+                  value={form.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  placeholder="Repeat password"
+                  className="w-full rounded-xl border border-[#E5E7EB] bg-[#F0FDFA] px-4 py-2.5 pr-11 text-[#1F2937] placeholder-[#6B7280] focus:bg-white focus:outline-none focus:border-[#0F766E] transition font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#1F2937] transition p-1 text-sm select-none"
+                  title={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? "👁️" : "🙈"}
+                </button>
+              </div>
+            </div>
+          </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-cyan-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
+            className="w-full rounded-xl bg-[#0F766E] py-3 font-bold text-white shadow-md shadow-[#0F766E]/20 hover:bg-[#115E59] transition disabled:opacity-50 text-sm mt-3 font-mono"
           >
-            {loading ? "Creating account..." : "Sign Up"}
+            {loading ? "Sending Verification Code..." : "Create Account & Send Code"}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-slate-400">
+        <div className="mt-6 pt-5 border-t border-[#E5E7EB] text-center text-xs text-[#6B7280]">
           Already have an account?{" "}
-          <Link to="/login" className="font-medium text-cyan-400 hover:text-cyan-300">
-            Login
+          <Link
+            to="/login"
+            className="font-bold text-[#0F766E] hover:underline transition"
+          >
+            Sign In
           </Link>
-        </p>
+        </div>
       </div>
     </div>
   );

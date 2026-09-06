@@ -30,9 +30,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 def require_roles(*allowed_roles: RoleEnum):
     def role_checker(current_user = Depends(get_current_user)):
-        print('DEBUG: require_roles called', {'allowed_roles': allowed_roles, 'current_user_role': getattr(current_user, 'role', None)})
-        if current_user.role not in allowed_roles:
-            print('DEBUG: require_roles denied', {'current_role': current_user.role})
+        user_role_val = getattr(current_user, "role", None)
+        user_role_str = str(user_role_val.value if hasattr(user_role_val, "value") else user_role_val).strip().lower().replace(" ", "").replace("_", "")
+        allowed_roles_str = [
+            str(r.value if hasattr(r, "value") else r).strip().lower().replace(" ", "").replace("_", "")
+            for r in allowed_roles
+        ]
+        if user_role_str not in allowed_roles_str:
             raise HTTPException(status_code=403, detail="Not enough permissions")
         return current_user
     return role_checker

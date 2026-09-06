@@ -17,11 +17,11 @@ export class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white text-center">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md space-y-4 shadow-2xl">
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-900 text-center font-sans">
+          <div className="bg-white border border-slate-200 rounded-2xl p-8 max-w-md space-y-4 shadow-xl">
             <span className="text-4xl">⚠️</span>
-            <h2 className="text-xl font-bold text-cyan-400">Application Error Encountered</h2>
-            <p className="text-xs text-slate-400 font-mono bg-slate-950 p-3 rounded-lg border border-slate-800 text-left overflow-x-auto">
+            <h2 className="text-xl font-bold text-slate-900">Application Error Encountered</h2>
+            <p className="text-xs text-rose-600 font-mono bg-rose-50 p-3 rounded-xl border border-rose-200 text-left overflow-x-auto">
               {this.state.error?.toString() || "Unknown rendering exception"}
             </p>
             <button
@@ -29,7 +29,7 @@ export class ErrorBoundary extends React.Component {
                 this.setState({ hasError: false, error: null });
                 window.location.href = "/login";
               }}
-              className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-xl text-xs transition"
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition shadow-sm"
             >
               Return to Login Page
             </button>

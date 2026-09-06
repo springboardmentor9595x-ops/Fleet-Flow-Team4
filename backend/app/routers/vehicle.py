@@ -45,6 +45,36 @@ def get_vehicle_status_counts(
     return vehicle_crud.get_vehicle_status_counts(db)
 
 
+from app.models.driver import Driver
+from app.models.user import User
+
+
+def format_vehicle_response(v, db: Session):
+    driver_name = None
+    if v.assigned_driver_id:
+        drv = db.query(Driver).filter(Driver.driver_id == v.assigned_driver_id).first()
+        if drv and drv.user_id:
+            usr = db.query(User).filter(User.user_id == drv.user_id).first()
+            if usr:
+                driver_name = usr.full_name
+
+    return {
+        "vehicle_id": v.vehicle_id,
+        "registration_number": v.registration_number,
+        "vehicle_type": v.vehicle_type,
+        "brand": v.brand,
+        "model": v.model,
+        "manufacture_year": v.manufacture_year,
+        "fuel_type": v.fuel_type,
+        "capacity": v.capacity,
+        "assigned_driver_id": v.assigned_driver_id,
+        "assigned_driver_name": driver_name or "Unassigned",
+        "status": v.status,
+        "created_at": v.created_at,
+        "updated_at": v.updated_at,
+    }
+
+
 @router.get("/", response_model=List[VehicleResponse])
 def list_vehicles(
     skip: int = Query(0, ge=0),
@@ -55,9 +85,10 @@ def list_vehicles(
     current_user = Depends(get_current_user),
 ):
     """Retrieve all vehicles with optional pagination and filtering by status/type."""
-    return vehicle_crud.get_vehicles(
+    vehicles = vehicle_crud.get_vehicles(
         db, skip=skip, limit=limit, status=vehicle_status, vehicle_type=vehicle_type
     )
+    return [format_vehicle_response(v, db) for v in vehicles]
 
 
 @router.get("/{vehicle_id}", response_model=VehicleResponse)
@@ -73,7 +104,7 @@ def get_vehicle(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Vehicle with ID '{vehicle_id}' not found.",
         )
-    return vehicle
+    return format_vehicle_response(vehicle, db)
 
 
 @router.put("/{vehicle_id}", response_model=VehicleResponse)

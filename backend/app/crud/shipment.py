@@ -47,7 +47,11 @@ def get_shipments(
     query = db.query(Shipment)
 
     if current_user.role == RoleEnum.Driver:
-        query = query.filter(Shipment.driver_id == current_user.user_id)
+        from app.models.driver import Driver
+        drv = db.query(Driver).filter(Driver.user_id == current_user.user_id).first()
+        if not drv:
+            return []
+        query = query.filter(Shipment.driver_id == drv.driver_id)
     elif driver_id:
         query = query.filter(Shipment.driver_id == driver_id)
 

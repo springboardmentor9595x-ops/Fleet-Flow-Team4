@@ -98,84 +98,84 @@ function SignupForm() {
   };
 
   return (
-    <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/80 p-8 shadow-2xl shadow-slate-950/50">
+    <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
       <div className="mb-8 text-center">
-        <h2 className="text-3xl font-semibold text-white">Create an account</h2>
-        <p className="mt-2 text-sm text-slate-400">Join the fleet operations platform</p>
+        <h2 className="text-2xl font-bold text-slate-900">Create an account</h2>
+        <p className="mt-1 text-sm text-slate-500">Join the fleet operations platform</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-300">Name</label>
+          <label className="mb-1.5 block text-xs font-semibold text-slate-600">Name</label>
           <input
             type="text"
             name="full_name"
             value={formData.full_name}
             onChange={handleChange}
             required
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none placeholder-slate-400 focus:bg-white focus:border-blue-500 transition"
             placeholder="Jane Doe"
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-300">Email</label>
+          <label className="mb-1.5 block text-xs font-semibold text-slate-600">Email</label>
           <input
             type="email"
             name="email"
             value={formData.email}
             onChange={handleChange}
             required
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none placeholder-slate-400 focus:bg-white focus:border-blue-500 transition"
             placeholder="you@example.com"
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-300">Phone</label>
+          <label className="mb-1.5 block text-xs font-semibold text-slate-600">Phone</label>
           <input
             type="text"
             name="phone"
             value={formData.phone}
             onChange={handleChange}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none placeholder-slate-400 focus:bg-white focus:border-blue-500 transition"
             placeholder="(555) 123-4567"
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-300">Password</label>
+          <label className="mb-1.5 block text-xs font-semibold text-slate-600">Password</label>
           <input
             type="password"
             name="password"
             value={formData.password}
             onChange={handleChange}
             required
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none placeholder-slate-400 focus:bg-white focus:border-blue-500 transition"
             placeholder="••••••••"
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-300">Confirm Password</label>
+          <label className="mb-1.5 block text-xs font-semibold text-slate-600">Confirm Password</label>
           <input
             type="password"
             name="confirmPassword"
             value={formData.confirmPassword}
             onChange={handleChange}
             required
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none placeholder-slate-400 focus:bg-white focus:border-blue-500 transition"
             placeholder="Re-enter password"
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-300">Role</label>
+          <label className="mb-1.5 block text-xs font-semibold text-slate-600">Role</label>
           <select
             name="role"
             value={formData.role}
             onChange={handleChange}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none focus:bg-white focus:border-blue-500 transition"
           >
             <option value="Driver">Driver</option>
             <option value="FleetManager">Manager</option>
@@ -183,21 +183,21 @@ function SignupForm() {
           </select>
         </div>
 
-        {error ? <p className="text-sm text-rose-400">{error}</p> : null}
+        {error ? <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">{error}</p> : null}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-cyan-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
+          className="w-full rounded-xl bg-blue-600 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
         >
           {loading ? "Creating account..." : "Create account"}
         </button>
       </form>
 
-      <div className="mt-6 space-y-2 text-center text-sm text-slate-400">
+      <div className="mt-6 space-y-2 text-center text-xs text-slate-500">
         <p>
           Already have an account?{' '}
-          <Link to="/login" className="font-medium text-cyan-400 hover:text-cyan-300">
+          <Link to="/login" className="font-semibold text-blue-600 hover:text-blue-700">
             Sign in
           </Link>
         </p>
@@ -205,7 +205,7 @@ function SignupForm() {
           Already signed up?{' '}
           <Link
             to={`/verify-otp${formData.email ? `?email=${encodeURIComponent(formData.email)}` : ""}`}
-            className="font-medium text-cyan-400 hover:text-cyan-300"
+            className="font-semibold text-blue-600 hover:text-blue-700"
           >
             Verify OTP
           </Link>

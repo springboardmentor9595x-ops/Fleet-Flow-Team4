@@ -35,7 +35,7 @@ function VerifyOtpPage() {
     try {
       await verifyOtp(email, otp);
       localStorage.removeItem("pendingVerificationEmail");
-      toast.success("Email verified successfully.");
+      toast.success("Email verified successfully!");
       navigate("/login");
     } catch (err) {
       const message = err.response?.data?.detail || "Verification failed.";
@@ -70,49 +70,61 @@ function VerifyOtpPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/80 p-8 shadow-2xl shadow-slate-950/50">
-        <div className="mb-8 text-center">
-          <h2 className="text-3xl font-semibold text-white">Verify your email</h2>
-          <p className="mt-2 text-sm text-slate-400">Enter the 6-digit code sent to {email || "your email"}</p>
+    <div className="flex min-h-screen items-center justify-center bg-[#F0FDFA] px-4 py-12 font-sans">
+      <div className="w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-xl">
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0F766E] text-white font-black text-2xl shadow-md shadow-[#0F766E]/20">
+            F
+          </div>
+          <h2 className="text-2xl font-bold text-[#1F2937] tracking-tight">Verify Your Email</h2>
+          <p className="mt-1 text-xs text-[#6B7280]">
+            Enter the 6-digit verification code sent to <strong className="text-[#0F766E]">{email || "your email"}</strong>
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">Verification code</label>
+            <label className="mb-1.5 block font-semibold uppercase tracking-wider text-[11px] text-[#1F2937] font-mono">
+              Verification Code
+            </label>
             <input
               type="text"
               value={otp}
               onChange={(event) => setOtp(event.target.value)}
               required
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400"
-              placeholder="123456"
+              maxLength={6}
+              className="w-full rounded-xl border border-[#E5E7EB] bg-[#F0FDFA] px-4 py-3 text-[#1F2937] outline-none focus:bg-white focus:border-[#0F766E] transition font-mono tracking-widest text-center text-lg font-bold"
+              placeholder="••••••"
             />
           </div>
 
-          {error ? <p className="text-sm text-rose-400">{error}</p> : null}
+          {error ? (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold">
+              {error}
+            </div>
+          ) : null}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-cyan-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
+            className="w-full rounded-xl bg-[#0F766E] py-3 font-bold text-white shadow-md shadow-[#0F766E]/20 hover:bg-[#115E59] transition disabled:cursor-not-allowed disabled:opacity-50 text-sm font-mono"
           >
-            {loading ? "Verifying..." : "Verify account"}
+            {loading ? "Verifying Code..." : "Verify & Activate Account"}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-slate-400">
+        <div className="mt-6 text-center text-xs text-[#6B7280]">
           <button
             type="button"
             onClick={handleResendOtp}
             disabled={resending}
-            className="font-medium text-cyan-400 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-70"
+            className="font-bold text-[#0F766E] hover:underline disabled:opacity-50"
           >
-            {resending ? "Sending..." : "Resend OTP"}
+            {resending ? "Sending New Code..." : "Resend Verification Code"}
           </button>
-          <p className="mt-3">
-            <Link to="/login" className="font-medium text-cyan-400 hover:text-cyan-300">
-              Back to login
+          <p className="mt-4 pt-4 border-t border-[#E5E7EB]">
+            <Link to="/login" className="font-semibold text-[#6B7280] hover:text-[#1F2937] transition">
+              ← Back to Login
             </Link>
           </p>
         </div>
