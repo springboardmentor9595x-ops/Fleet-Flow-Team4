@@ -1,12 +1,17 @@
+import json
 import logging
 import secrets
 import smtplib
 import ssl
 import string
+import urllib.error
+import urllib.request
 from email.message import EmailMessage
 from typing import Optional
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def generate_verification_otp(length: int = 6) -> str:
@@ -37,7 +42,7 @@ def send_verification_email(recipient: str, full_name: str, otp: str, app_url: O
         send_email(subject=subject, recipient=recipient, body=body, html=html)
         return True
     except Exception as exc:
-        _log_verification_fallback(recipient=recipient, otp=otp, subject=subject)
+        _log_verification_fallback(recipient=recipient, subject=subject)
         logger.exception("Email delivery failed, using OTP fallback: %s", exc)
         return False
 
@@ -65,25 +70,61 @@ def send_password_reset_email(recipient: str, full_name: str, otp: str) -> bool:
         send_email(subject=subject, recipient=recipient, body=body, html=html)
         return True
     except Exception as exc:
-        _log_verification_fallback(recipient=recipient, otp=otp, subject=subject)
+        _log_verification_fallback(recipient=recipient, subject=subject)
         logger.exception("Email delivery failed, using OTP fallback: %s", exc)
         return False
 
 
-logger = logging.getLogger(__name__)
-
-
-def _log_verification_fallback(recipient: str, otp: str, subject: str) -> None:
+def _log_verification_fallback(recipient: str, subject: str) -> None:
     logger.warning(
-        "SMTP mail delivery unavailable. OTP fallback enabled. recipient=%s subject=%s otp=%s",
+        "Mail delivery unavailable. OTP fallback enabled. recipient=%s subject=%s",
         recipient,
         subject,
-        otp,
     )
-    print(f"[OTP-FALLBACK] recipient={recipient} subject={subject} otp={otp}")
 
 
-def send_email(subject: str, recipient: str, body: str, html: Optional[str] = None) -> None:
+def send_email_resend(subject: str, recipient: str, body: str, html: Optional[str] = None) -> None:
+    api_key = settings.RESEND_API_KEY
+    if not api_key:
+        raise RuntimeError("RESEND_API_KEY is not configured.")
+
+    smtp_from = settings.SMTP_FROM_EMAIL or settings.SMTP_FROM or "onboarding@resend.dev"
+    smtp_from_name = settings.SMTP_FROM_NAME or "FleetFlow"
+    sender = f"{smtp_from_name} <{smtp_from}>" if smtp_from_name and "<" not in smtp_from else smtp_from
+
+    payload = {
+        "from": sender,
+        "to": [recipient],
+        "subject": subject,
+        "text": body,
+    }
+    if html:
+        payload["html"] = html
+
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "FleetFlow/1.0",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status not in (200, 201):
+                res_body = resp.read().decode("utf-8", errors="ignore")
+                raise RuntimeError(f"Resend API HTTP error {resp.status}: {res_body}")
+    except urllib.error.HTTPError as err:
+        err_body = err.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Resend API HTTP error {err.code}: {err_body}")
+    except Exception as exc:
+        raise RuntimeError(f"Resend HTTPS request failed: {exc}")
+
+
+def send_email_smtp(subject: str, recipient: str, body: str, html: Optional[str] = None) -> None:
     smtp_user = settings.SMTP_USERNAME or settings.SMTP_USER
     smtp_from = settings.SMTP_FROM_EMAIL or settings.SMTP_FROM or smtp_user
     smtp_from_name = settings.SMTP_FROM_NAME or "Fleet Manager"
@@ -115,3 +156,14 @@ def send_email(subject: str, recipient: str, body: str, html: Optional[str] = No
             server.send_message(message)
 
 
+def send_email(subject: str, recipient: str, body: str, html: Optional[str] = None) -> None:
+    provider = (settings.EMAIL_PROVIDER or "resend").lower()
+    if provider == "resend" or settings.RESEND_API_KEY:
+        send_email_resend(subject=subject, recipient=recipient, body=body, html=html)
+    elif provider == "smtp":
+        send_email_smtp(subject=subject, recipient=recipient, body=body, html=html)
+    else:
+        try:
+            send_email_resend(subject=subject, recipient=recipient, body=body, html=html)
+        except Exception:
+            send_email_smtp(subject=subject, recipient=recipient, body=body, html=html)
