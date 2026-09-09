@@ -14,6 +14,27 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+_last_email_error: Optional[str] = None
+
+
+def get_last_email_error() -> Optional[str]:
+    """Returns the last sanitized email error message, or None if the last send succeeded."""
+    return _last_email_error
+
+
+def _sanitize_error_message(err_msg: str) -> str:
+    """Removes sensitive keys, passwords, and tokens from error strings."""
+    if not err_msg:
+        return "Unknown email error"
+    if settings.RESEND_API_KEY and settings.RESEND_API_KEY in err_msg:
+        err_msg = err_msg.replace(settings.RESEND_API_KEY, "[REDACTED_API_KEY]")
+    if settings.SMTP_PASSWORD and settings.SMTP_PASSWORD in err_msg:
+        err_msg = err_msg.replace(settings.SMTP_PASSWORD, "[REDACTED_PASSWORD]")
+
+    err_msg = re.sub(r're_[A-Za-z0-9_]{10,}', 're_[REDACTED]', err_msg)
+    err_msg = re.sub(r'Bearer\s+[A-Za-z0-9_\-\.]+', 'Bearer [REDACTED]', err_msg, flags=re.IGNORECASE)
+    return err_msg
+
 
 def generate_verification_otp(length: int = 6) -> str:
     return "".join(secrets.choice(string.digits) for _ in range(length))
@@ -41,6 +62,9 @@ def get_resend_sender_address() -> str:
 
 
 def send_verification_email(recipient: str, full_name: str, otp: str, app_url: Optional[str] = None) -> bool:
+    global _last_email_error
+    _last_email_error = None
+
     verification_link = f"{app_url or settings.APP_BASE_URL}/verify-otp?email={recipient}&otp={otp}"
     subject = "Verify your FleetFlow account"
     body = (
@@ -62,6 +86,7 @@ def send_verification_email(recipient: str, full_name: str, otp: str, app_url: O
 
     try:
         send_email(subject=subject, recipient=recipient, body=body, html=html)
+        _last_email_error = None
         return True
     except Exception as exc:
         _log_verification_fallback(recipient=recipient, subject=subject, exc=exc)
@@ -69,6 +94,9 @@ def send_verification_email(recipient: str, full_name: str, otp: str, app_url: O
 
 
 def send_password_reset_email(recipient: str, full_name: str, otp: str) -> bool:
+    global _last_email_error
+    _last_email_error = None
+
     subject = "Reset your FleetFlow password"
     body = (
         f"Hello {full_name},\n\n"
@@ -89,6 +117,7 @@ def send_password_reset_email(recipient: str, full_name: str, otp: str) -> bool:
 
     try:
         send_email(subject=subject, recipient=recipient, body=body, html=html)
+        _last_email_error = None
         return True
     except Exception as exc:
         _log_verification_fallback(recipient=recipient, subject=subject, exc=exc)
@@ -96,22 +125,19 @@ def send_password_reset_email(recipient: str, full_name: str, otp: str) -> bool:
 
 
 def _log_verification_fallback(recipient: str, subject: str, exc: Optional[Exception] = None) -> None:
+    global _last_email_error
     provider = (settings.EMAIL_PROVIDER or "resend").lower()
-    err_msg = str(exc) if exc else "Unknown error"
+    raw_err = str(exc) if exc else "Unknown error"
+    sanitized_err = _sanitize_error_message(raw_err)
 
-    if settings.RESEND_API_KEY and settings.RESEND_API_KEY in err_msg:
-        err_msg = err_msg.replace(settings.RESEND_API_KEY, "[REDACTED_API_KEY]")
-    if settings.SMTP_PASSWORD and settings.SMTP_PASSWORD in err_msg:
-        err_msg = err_msg.replace(settings.SMTP_PASSWORD, "[REDACTED_PASSWORD]")
-
-    err_msg = re.sub(r'Bearer\s+[A-Za-z0-9_\-\.]+', 'Bearer [REDACTED]', err_msg, flags=re.IGNORECASE)
+    _last_email_error = sanitized_err
 
     logger.warning(
         "Email delivery failed [provider=%s] recipient=%s subject=%s error=%s",
         provider,
         recipient,
         subject,
-        err_msg,
+        sanitized_err,
     )
 
 
@@ -167,10 +193,22 @@ def send_email_resend(subject: str, recipient: str, body: str, html: Optional[st
         with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status not in (200, 201):
                 res_body = resp.read().decode("utf-8", errors="ignore")
-                raise RuntimeError(f"Resend HTTP {resp.status}: {res_body[:200]}")
+                raise RuntimeError(f"Resend HTTP {resp.status}: {res_body[:300]}")
     except urllib.error.HTTPError as err:
         err_body = err.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Resend HTTP {err.code}: {err_body[:200]}")
+        msg_text = err_body
+        try:
+            data = json.loads(err_body)
+            if isinstance(data, dict):
+                if "message" in data:
+                    msg_text = data["message"]
+                elif "error" in data and isinstance(data["error"], dict) and "message" in data["error"]:
+                    msg_text = data["error"]["message"]
+                elif "name" in data and "message" in data:
+                    msg_text = f"{data['name']}: {data['message']}"
+        except Exception:
+            pass
+        raise RuntimeError(f"Resend HTTP {err.code}: {msg_text[:300]}")
     except Exception as exc:
         raise RuntimeError(f"Resend HTTPS request failed: {exc}")
 
@@ -218,3 +256,4 @@ def send_email(subject: str, recipient: str, body: str, html: Optional[str] = No
             send_email_resend(subject=subject, recipient=recipient, body=body, html=html)
         except Exception:
             send_email_smtp(subject=subject, recipient=recipient, body=body, html=html)
+

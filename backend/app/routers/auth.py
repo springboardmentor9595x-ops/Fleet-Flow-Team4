@@ -27,7 +27,13 @@ from app.core.deps import get_current_user, require_roles
 from app.models.user import User, RoleEnum, PendingRegistration
 from app.models.driver import Driver
 from app.models.vehicle import Vehicle
-from app.core.email import generate_verification_otp, send_email, send_verification_email, send_password_reset_email
+from app.core.email import (
+    generate_verification_otp,
+    get_last_email_error,
+    send_email,
+    send_verification_email,
+    send_password_reset_email,
+)
 
 router = APIRouter()
 
@@ -108,13 +114,18 @@ def signup(user_in: UserCreate, db: Session = Depends(get_db)):
 
     # 9. Send OTP to user's email contact
     sent = send_verification_email(recipient=email_clean, full_name=user_in.full_name, otp=otp)
-    if sent:
-        msg = "Verification code sent to your email. Please verify to activate your account."
-    else:
-        msg = "Verification code generated. Please verify your email to activate your account."
+    if not sent:
+        # Clean up pending registration so user is not stuck in unverified state upon failure
+        db.delete(pending)
+        db.commit()
+        err_detail = get_last_email_error() or "Email delivery failed."
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to send verification code email: {err_detail}",
+        )
 
     return SignupResponse(
-        message=msg,
+        message="Verification code sent to your email. Please verify to activate your account.",
         email=email_clean,
     )
 
@@ -206,11 +217,13 @@ def resend_otp(email: str, db: Session = Depends(get_db)):
         pending.attempts = 0
         db.commit()
         sent = send_verification_email(recipient=pending.email, full_name=pending.full_name, otp=new_otp)
-        if sent:
-            msg = "A new verification code has been sent to your email."
-        else:
-            msg = "A new verification code has been generated. Please check your email inbox."
-        return {"message": msg}
+        if not sent:
+            err_detail = get_last_email_error() or "Email delivery failed."
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to send verification code email: {err_detail}",
+            )
+        return {"message": "A new verification code has been sent to your email."}
 
     # Check existing unverified user in users table
     user = get_user_by_email(db, email_clean)
@@ -220,11 +233,13 @@ def resend_otp(email: str, db: Session = Depends(get_db)):
         new_otp = generate_verification_otp()
         set_verification_code(db, user, new_otp, expires_in_minutes=10)
         sent = send_verification_email(recipient=user.email, full_name=user.full_name, otp=new_otp)
-        if sent:
-            msg = "A new verification code has been sent to your email."
-        else:
-            msg = "A new verification code has been generated. Please check your email inbox."
-        return {"message": msg}
+        if not sent:
+            err_detail = get_last_email_error() or "Email delivery failed."
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to send verification code email: {err_detail}",
+            )
+        return {"message": "A new verification code has been sent to your email."}
 
     raise HTTPException(status_code=404, detail="No registration found for this email.")
 
@@ -238,11 +253,13 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     otp = generate_verification_otp()
     set_verification_code(db, user, otp, expires_in_minutes=10)
     sent = send_password_reset_email(recipient=user.email, full_name=user.full_name or "User", otp=otp)
-    if sent:
-        msg = "Password reset code sent to your email."
-    else:
-        msg = "Password reset code generated. Please check your email inbox."
-    return {"message": msg}
+    if not sent:
+        err_detail = get_last_email_error() or "Email delivery failed."
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to send password reset email: {err_detail}",
+        )
+    return {"message": "Password reset code sent to your email."}
 
 
 @router.post("/reset-password")
