@@ -187,8 +187,15 @@ class TestResendEmail(unittest.TestCase):
              patch("app.config.settings.SMTP_FROM_EMAIL", None):
             self.assertEqual(get_resend_sender_address(), "onboarding@resend.dev")
 
-        with patch("app.config.settings.RESEND_FROM", "verified@mycompany.com"):
-            self.assertEqual(get_resend_sender_address(), "verified@mycompany.com")
+    def test_verified_custom_domain_sender(self):
+        """10. Test that a verified custom domain sender from environment is accepted as Resend FROM address."""
+        with patch("app.config.settings.SMTP_FROM", "noreply@customfleetdomain.com"), \
+             patch("app.config.settings.RESEND_FROM", None), \
+             patch("app.config.settings.SMTP_FROM_EMAIL", None):
+            self.assertEqual(get_resend_sender_address(), "noreply@customfleetdomain.com")
+
+        with patch("app.config.settings.RESEND_FROM", "notifications@fleetflow.org"):
+            self.assertEqual(get_resend_sender_address(), "notifications@fleetflow.org")
 
     def test_signup_email_delivery_failure_raises_502(self):
         """10. Test signup endpoint returns HTTP 502 Bad Gateway when email delivery fails."""

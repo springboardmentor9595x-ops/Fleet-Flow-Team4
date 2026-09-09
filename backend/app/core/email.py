@@ -247,13 +247,9 @@ def send_email_smtp(subject: str, recipient: str, body: str, html: Optional[str]
 
 def send_email(subject: str, recipient: str, body: str, html: Optional[str] = None) -> None:
     provider = (settings.EMAIL_PROVIDER or "resend").lower()
-    if provider == "resend" or settings.RESEND_API_KEY:
-        send_email_resend(subject=subject, recipient=recipient, body=body, html=html)
-    elif provider == "smtp":
+    if provider == "smtp":
         send_email_smtp(subject=subject, recipient=recipient, body=body, html=html)
     else:
-        try:
-            send_email_resend(subject=subject, recipient=recipient, body=body, html=html)
-        except Exception:
-            send_email_smtp(subject=subject, recipient=recipient, body=body, html=html)
+        send_email_resend(subject=subject, recipient=recipient, body=body, html=html)
+
 
