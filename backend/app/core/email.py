@@ -97,11 +97,31 @@ def _log_verification_fallback(recipient: str, subject: str, exc: Optional[Excep
 def send_email_resend(subject: str, recipient: str, body: str, html: Optional[str] = None) -> None:
     api_key = settings.RESEND_API_KEY
     if not api_key:
-        raise RuntimeError("RESEND_API_KEY is not configured.")
+        raise RuntimeError("RESEND_API_KEY environment variable is missing.")
 
     smtp_from = settings.SMTP_FROM_EMAIL or settings.SMTP_FROM or "onboarding@resend.dev"
     smtp_from_name = settings.SMTP_FROM_NAME or "FleetFlow"
     sender = f"{smtp_from_name} <{smtp_from}>" if smtp_from_name and "<" not in smtp_from else smtp_from
+
+    # Try official resend SDK if installed
+    try:
+        import resend
+        resend.api_key = api_key
+        params = {
+            "from": sender,
+            "to": [recipient],
+            "subject": subject,
+            "text": body,
+        }
+        if html:
+            params["html"] = html
+        resend.Emails.send(params)
+        return
+    except ImportError:
+        pass
+    except Exception as exc:
+        # Fallback to direct HTTPS request if SDK fails
+        logger.debug("Resend SDK call failed, using HTTPS REST API fallback: %s", exc)
 
     payload = {
         "from": sender,
