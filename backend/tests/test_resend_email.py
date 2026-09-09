@@ -156,6 +156,16 @@ class TestResendEmail(unittest.TestCase):
         self.assertIn("Reset your FleetFlow password", kwargs["subject"])
         self.assertIn("999888", kwargs["body"])
 
+    def test_gmail_unverified_domain_replacement(self):
+        """9. Test that public webmail domains like gmail.com are replaced with onboarding@resend.dev for Resend."""
+        from app.core.email import get_resend_sender_address
+
+        with patch("app.config.settings.SMTP_FROM", "testuser@gmail.com"):
+            self.assertEqual(get_resend_sender_address(), "onboarding@resend.dev")
+
+        with patch("app.config.settings.RESEND_FROM", "verified@mycompany.com"):
+            self.assertEqual(get_resend_sender_address(), "verified@mycompany.com")
+
 
 if __name__ == "__main__":
     unittest.main()

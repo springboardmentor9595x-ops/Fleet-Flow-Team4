@@ -19,6 +19,27 @@ def generate_verification_otp(length: int = 6) -> str:
     return "".join(secrets.choice(string.digits) for _ in range(length))
 
 
+def get_resend_sender_address() -> str:
+    """
+    Returns a valid Resend FROM email address.
+    Resend forbids sending from unverified public webmail domains like @gmail.com, @yahoo.com, @hotmail.com.
+    If a custom verified domain is provided via RESEND_FROM / SMTP_FROM_EMAIL / SMTP_FROM and is NOT a public webmail domain, it is used.
+    Otherwise, defaults to 'onboarding@resend.dev'.
+    """
+    raw_from = settings.RESEND_FROM or settings.SMTP_FROM_EMAIL or settings.SMTP_FROM
+    if raw_from:
+        raw_from = raw_from.strip()
+        match = re.search(r'<([^>]+)>', raw_from)
+        clean_email = match.group(1) if match else raw_from
+
+        lower_email = clean_email.lower()
+        public_webmail_domains = ('@gmail.com', '@yahoo.com', '@hotmail.com', '@outlook.com', '@icloud.com', '@aol.com')
+        if not any(lower_email.endswith(dom) for dom in public_webmail_domains):
+            return clean_email
+
+    return "onboarding@resend.dev"
+
+
 def send_verification_email(recipient: str, full_name: str, otp: str, app_url: Optional[str] = None) -> bool:
     verification_link = f"{app_url or settings.APP_BASE_URL}/verify-otp?email={recipient}&otp={otp}"
     subject = "Verify your FleetFlow account"
@@ -99,7 +120,7 @@ def send_email_resend(subject: str, recipient: str, body: str, html: Optional[st
     if not api_key:
         raise RuntimeError("RESEND_API_KEY environment variable is missing.")
 
-    smtp_from = settings.SMTP_FROM_EMAIL or settings.SMTP_FROM or "onboarding@resend.dev"
+    smtp_from = get_resend_sender_address()
     smtp_from_name = settings.SMTP_FROM_NAME or "FleetFlow"
     sender = f"{smtp_from_name} <{smtp_from}>" if smtp_from_name and "<" not in smtp_from else smtp_from
 
@@ -120,7 +141,6 @@ def send_email_resend(subject: str, recipient: str, body: str, html: Optional[st
     except ImportError:
         pass
     except Exception as exc:
-        # Fallback to direct HTTPS request if SDK fails
         logger.debug("Resend SDK call failed, using HTTPS REST API fallback: %s", exc)
 
     payload = {

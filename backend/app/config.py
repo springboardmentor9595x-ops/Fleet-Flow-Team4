@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     EMAIL_PROVIDER: str = "resend"
     RESEND_API_KEY: str | None = None
+    RESEND_FROM: str | None = None
 
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587
@@ -32,7 +33,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:3000"
     ADMIN_EMAIL: str = "admin@example.com"
 
-    @field_validator("EMAIL_PROVIDER", "RESEND_API_KEY", "SMTP_HOST", "SMTP_USER", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_EMAIL", "SMTP_FROM_NAME", mode="before")
+    @field_validator("EMAIL_PROVIDER", "RESEND_API_KEY", "RESEND_FROM", "SMTP_HOST", "SMTP_USER", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_EMAIL", "SMTP_FROM_NAME", mode="before")
     @classmethod
     def strip_surrounding_quotes(cls, value):
         if isinstance(value, str):
