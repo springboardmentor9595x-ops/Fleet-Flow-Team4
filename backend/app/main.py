@@ -50,6 +50,17 @@ async def start_background_tasks():
     asyncio.create_task(tracking_ws.run_tracking_simulation())
 
 
+from app.core.redis_cache import get_redis_client
+
+
 @app.get("/")
 def root():
-    return {"message": "FleetFlow API running"}
+    client = get_redis_client()
+    if client is not None:
+        redis_status = "connected"
+    else:
+        redis_status = "unavailable (using in-memory fallback)"
+    return {
+        "message": "FleetFlow API running",
+        "redis_status": redis_status,
+    }

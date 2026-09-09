@@ -35,3 +35,16 @@ celery_app.conf.beat_schedule = {
     },
 }
 
+
+def is_celery_broker_available() -> bool:
+    """Checks if Redis broker is online and reachable for Celery async workers."""
+    try:
+        import redis
+        client = redis.Redis.from_url(REDIS_URL, socket_connect_timeout=0.5)
+        if client.ping():
+            return True
+        else:
+            return False
+    except Exception:
+        return False
+

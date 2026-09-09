@@ -33,13 +33,15 @@ class ConnectionManager:
         print(f"[Tracking WS] Client disconnected. Active: {len(self.active_connections)}")
 
     async def broadcast(self, message: dict):
-        # 1. Redis Pub/Sub broadcast if Redis available
+        # 1. Redis Pub/Sub broadcast if Redis is available
         client = get_redis_client()
-        if client:
+        if client is not None:
             try:
                 client.publish("fleetflow_tracking_channel", json.dumps(message))
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[Redis PubSub Warning] Broadcast error: {exc}. Using local WebSocket fallback.")
+        else:
+            print("[Redis PubSub] Redis unavailable. Broadcasting via local WebSocket connection pool.")
 
         # 2. In-memory WebSocket broadcast to connected local clients
         stale = []
