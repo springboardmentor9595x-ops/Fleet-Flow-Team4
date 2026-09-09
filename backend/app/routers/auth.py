@@ -107,10 +107,14 @@ def signup(user_in: UserCreate, db: Session = Depends(get_db)):
     db.commit()
 
     # 9. Send OTP to user's email contact
-    try:
-        send_verification_email(recipient=email_clean, full_name=user_in.full_name, otp=otp)
-    except Exception as exc:
-        print(f"[SIGNUP OTP EMAIL] Warning: Failed to send email: {exc}")
+    sent = send_verification_email(recipient=email_clean, full_name=user_in.full_name, otp=otp)
+    if not sent:
+        db.delete(pending)
+        db.commit()
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to send verification code email. Please check your email address or server configuration.",
+        )
 
     return SignupResponse(
         message="Verification code sent to your email. Please verify to activate your account.",
@@ -204,10 +208,12 @@ def resend_otp(email: str, db: Session = Depends(get_db)):
         pending.otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
         pending.attempts = 0
         db.commit()
-        try:
-            send_verification_email(recipient=pending.email, full_name=pending.full_name, otp=new_otp)
-        except Exception as exc:
-            print(f"[RESEND OTP] Warning: {exc}")
+        sent = send_verification_email(recipient=pending.email, full_name=pending.full_name, otp=new_otp)
+        if not sent:
+            raise HTTPException(
+                status_code=502,
+                detail="Failed to send verification code email. Please try again later.",
+            )
         return {"message": "A new verification code has been sent to your email."}
 
     # Check existing unverified user in users table
@@ -217,7 +223,12 @@ def resend_otp(email: str, db: Session = Depends(get_db)):
             return {"message": "Your account is already verified. You can log in directly."}
         new_otp = generate_verification_otp()
         set_verification_code(db, user, new_otp, expires_in_minutes=10)
-        send_verification_email(recipient=user.email, full_name=user.full_name, otp=new_otp)
+        sent = send_verification_email(recipient=user.email, full_name=user.full_name, otp=new_otp)
+        if not sent:
+            raise HTTPException(
+                status_code=502,
+                detail="Failed to send verification code email. Please try again later.",
+            )
         return {"message": "A new verification code has been sent to your email."}
 
     raise HTTPException(status_code=404, detail="No registration found for this email.")
@@ -231,7 +242,12 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
 
     otp = generate_verification_otp()
     set_verification_code(db, user, otp, expires_in_minutes=10)
-    send_password_reset_email(recipient=user.email, full_name=user.full_name or "User", otp=otp)
+    sent = send_password_reset_email(recipient=user.email, full_name=user.full_name or "User", otp=otp)
+    if not sent:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to send password reset email. Please try again later.",
+        )
     return {"message": "Password reset code sent to your email."}
 
 

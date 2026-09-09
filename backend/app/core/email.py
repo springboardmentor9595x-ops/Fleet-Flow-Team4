@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import secrets
 import smtplib
 import ssl
@@ -42,8 +43,7 @@ def send_verification_email(recipient: str, full_name: str, otp: str, app_url: O
         send_email(subject=subject, recipient=recipient, body=body, html=html)
         return True
     except Exception as exc:
-        _log_verification_fallback(recipient=recipient, subject=subject)
-        logger.exception("Email delivery failed, using OTP fallback: %s", exc)
+        _log_verification_fallback(recipient=recipient, subject=subject, exc=exc)
         return False
 
 
@@ -70,16 +70,27 @@ def send_password_reset_email(recipient: str, full_name: str, otp: str) -> bool:
         send_email(subject=subject, recipient=recipient, body=body, html=html)
         return True
     except Exception as exc:
-        _log_verification_fallback(recipient=recipient, subject=subject)
-        logger.exception("Email delivery failed, using OTP fallback: %s", exc)
+        _log_verification_fallback(recipient=recipient, subject=subject, exc=exc)
         return False
 
 
-def _log_verification_fallback(recipient: str, subject: str) -> None:
+def _log_verification_fallback(recipient: str, subject: str, exc: Optional[Exception] = None) -> None:
+    provider = (settings.EMAIL_PROVIDER or "resend").lower()
+    err_msg = str(exc) if exc else "Unknown error"
+
+    if settings.RESEND_API_KEY and settings.RESEND_API_KEY in err_msg:
+        err_msg = err_msg.replace(settings.RESEND_API_KEY, "[REDACTED_API_KEY]")
+    if settings.SMTP_PASSWORD and settings.SMTP_PASSWORD in err_msg:
+        err_msg = err_msg.replace(settings.SMTP_PASSWORD, "[REDACTED_PASSWORD]")
+
+    err_msg = re.sub(r'Bearer\s+[A-Za-z0-9_\-\.]+', 'Bearer [REDACTED]', err_msg, flags=re.IGNORECASE)
+
     logger.warning(
-        "Mail delivery unavailable. OTP fallback enabled. recipient=%s subject=%s",
+        "Email delivery failed [provider=%s] recipient=%s subject=%s error=%s",
+        provider,
         recipient,
         subject,
+        err_msg,
     )
 
 
@@ -116,10 +127,10 @@ def send_email_resend(subject: str, recipient: str, body: str, html: Optional[st
         with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status not in (200, 201):
                 res_body = resp.read().decode("utf-8", errors="ignore")
-                raise RuntimeError(f"Resend API HTTP error {resp.status}: {res_body}")
+                raise RuntimeError(f"Resend HTTP {resp.status}: {res_body[:200]}")
     except urllib.error.HTTPError as err:
         err_body = err.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Resend API HTTP error {err.code}: {err_body}")
+        raise RuntimeError(f"Resend HTTP {err.code}: {err_body[:200]}")
     except Exception as exc:
         raise RuntimeError(f"Resend HTTPS request failed: {exc}")
 
