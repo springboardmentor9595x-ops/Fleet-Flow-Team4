@@ -53,7 +53,7 @@ async def start_background_tasks():
 from app.core.redis_cache import get_redis_client
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     client = get_redis_client()
     if client is not None:
