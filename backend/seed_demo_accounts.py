@@ -33,11 +33,12 @@ def seed():
             try:
                 user = db.query(User).filter(func.lower(User.email) == email).first()
                 if user:
-                    user.password = hash_password(acc["password"])
+                    if not verify_password(acc["password"], user.password or ""):
+                        user.password = hash_password(acc["password"])
+                        print(f"[UPDATED DEMO ACCOUNT PW] {email}", flush=True)
                     user.is_verified = True
                     user.role = acc["role"]
                     db.commit()
-                    print(f"[UPDATED DEMO ACCOUNT] {email}", flush=True)
                 else:
                     user = User(
                         email=email,
