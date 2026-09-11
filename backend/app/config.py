@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:3000"
     ADMIN_EMAIL: str = "admin@example.com"
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def resolve_database_url(cls, value):
+        import os
+        env_url = os.getenv("RENDER_DATABASE_URL") or os.getenv("DATABASE_URL")
+        if env_url and env_url.strip():
+            return env_url.strip()
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
     @field_validator("EMAIL_PROVIDER", "RESEND_API_KEY", "RESEND_FROM", "SMTP_HOST", "SMTP_USER", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_EMAIL", "SMTP_FROM_NAME", mode="before")
     @classmethod
     def strip_surrounding_quotes(cls, value):

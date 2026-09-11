@@ -6,8 +6,8 @@ from app.config import settings
 # Database URL from .env
 SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL
 
-# Create database engine
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+# Create database engine with pool_pre_ping for cloud connection stability
+engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 
 # Create session
 SessionLocal = sessionmaker(
