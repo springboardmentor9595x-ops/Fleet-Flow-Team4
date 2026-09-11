@@ -79,16 +79,7 @@ except Exception as e:
 fi
 
 echo "Ensuring all demo accounts are seeded and verified..."
-python -c "
-import sys, os
-sys.path.insert(0, '/app')
-sys.path.insert(0, '.')
-try:
-    from seed_demo_accounts import seed
-    seed()
-except Exception as e:
-    print(f'Demo account seed notice: {e}')
-" 2>/dev/null || true
+PYTHONPATH=/app:/app/backend python /app/seed_demo_accounts.py || PYTHONPATH=. python seed_demo_accounts.py || true
 
 # If additional command arguments were passed (e.g. celery worker/beat), run them instead of uvicorn
 if [ "$#" -gt 0 ]; then
