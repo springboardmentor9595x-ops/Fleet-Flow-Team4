@@ -30,39 +30,42 @@ def seed():
     try:
         for acc in DEMO_ACCOUNTS:
             email = acc["email"].strip().lower()
-            user = db.query(User).filter(func.lower(User.email) == email).first()
-            if user:
-                if not verify_password(acc["password"], user.password or ""):
+            try:
+                user = db.query(User).filter(func.lower(User.email) == email).first()
+                if user:
                     user.password = hash_password(acc["password"])
-                    print(f"[UPDATE DEMO ACC PW] {email}", flush=True)
-                user.is_verified = True
-                user.role = acc["role"]
-            else:
-                user = User(
-                    email=email,
-                    password=hash_password(acc["password"]),
-                    full_name=acc["full_name"],
-                    role=acc["role"],
-                    is_verified=True,
-                )
-                db.add(user)
-                db.flush()
-                print(f"[CREATE DEMO ACC] {email}", flush=True)
+                    user.is_verified = True
+                    user.role = acc["role"]
+                    db.commit()
+                    print(f"[UPDATED DEMO ACCOUNT] {email}", flush=True)
+                else:
+                    user = User(
+                        email=email,
+                        password=hash_password(acc["password"]),
+                        full_name=acc["full_name"],
+                        role=acc["role"],
+                        is_verified=True,
+                    )
+                    db.add(user)
+                    db.commit()
+                    db.refresh(user)
+                    print(f"[CREATED DEMO ACCOUNT] {email}", flush=True)
 
-            if acc["role"] == RoleEnum.Driver:
-                try:
-                    driver_record = db.query(Driver).filter(Driver.user_id == user.user_id).first()
-                    if not driver_record:
-                        db.add(Driver(driver_id=uuid.uuid4(), user_id=user.user_id, status="Available"))
-                except Exception as de:
-                    print(f"[DRIVER RECORD NOTICE] {de}", flush=True)
+                if acc["role"] == RoleEnum.Driver and user and user.user_id:
+                    try:
+                        driver_record = db.query(Driver).filter(Driver.user_id == user.user_id).first()
+                        if not driver_record:
+                            db.add(Driver(driver_id=uuid.uuid4(), user_id=user.user_id, status="Available"))
+                            db.commit()
+                    except Exception as de:
+                        db.rollback()
+                        print(f"[DRIVER RECORD NOTICE] {de}", flush=True)
 
-        db.commit()
-        print("[DEMO SEED COMPLETE] All 4 demo accounts seeded and verified!", flush=True)
-    except Exception as e:
-        db.rollback()
-        print(f"[DEMO SEED ERROR] {e}", flush=True)
-        raise
+            except Exception as acc_err:
+                db.rollback()
+                print(f"[DEMO ACCOUNT SEED ERROR for {email}] {acc_err}", flush=True)
+
+        print("[DEMO SEED COMPLETE] All demo accounts processed!", flush=True)
     finally:
         db.close()
 
