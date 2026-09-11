@@ -15,7 +15,7 @@ sys.path.insert(0, HERE)
 from app.database import SessionLocal
 from app.models.user import User, RoleEnum
 from app.models.driver import Driver
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from sqlalchemy import func
 
 DEMO_ACCOUNTS = [
@@ -32,9 +32,11 @@ def seed():
             email = acc["email"].strip().lower()
             user = db.query(User).filter(func.lower(User.email) == email).first()
             if user:
-                user.password = hash_password(acc["password"])
+                if not verify_password(acc["password"], user.password or ""):
+                    user.password = hash_password(acc["password"])
+                    print(f"[UPDATE DEMO ACC PW] {email}", flush=True)
                 user.is_verified = True
-                print(f"[UPDATE DEMO ACC] {email}", flush=True)
+                user.role = acc["role"]
             else:
                 user = User(
                     email=email,
