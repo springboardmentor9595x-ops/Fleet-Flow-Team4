@@ -49,10 +49,11 @@ app.include_router(tracking_ws.router, tags=["Live Tracking"])
 async def start_background_tasks():
     asyncio.create_task(tracking_ws.run_tracking_simulation())
     try:
-        from seed_demo_accounts import seed
+        from app.seed import seed
         seed()
     except Exception as e:
-        print(f"Startup seed notice: {e}")
+        print(f"[STARTUP SEED ERROR] {e}", flush=True)
+
 
 
 

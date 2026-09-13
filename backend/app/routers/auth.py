@@ -499,4 +499,15 @@ def update_user_role(
         "account_status": "Active" if target_user.is_verified else "Pending Verification",
         "created_at": target_user.created_at,
         "assigned_vehicle": assigned_veh,
-    }
+    }
+
+
+@router.post("/seed-demo-accounts")
+def trigger_seed_demo_accounts():
+    try:
+        from app.seed import seed
+        seed()
+        return {"status": "success", "message": "All demo accounts seeded successfully!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Seeding error: {str(e)}")
+
