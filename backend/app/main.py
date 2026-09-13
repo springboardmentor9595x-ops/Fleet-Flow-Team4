@@ -45,20 +45,15 @@ app.include_router(tracking_ws.router, tags=["Live Tracking"])
 
 
 
-try:
-    import sys
-    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if backend_dir not in sys.path:
-        sys.path.insert(0, backend_dir)
-    from seed_demo_accounts import seed
-    seed()
-except Exception as e:
-    print(f"[MODULE INIT SEED NOTICE] {e}", flush=True)
-
-
 @app.on_event("startup")
 async def start_background_tasks():
     asyncio.create_task(tracking_ws.run_tracking_simulation())
+    try:
+        from seed_demo_accounts import seed
+        seed()
+    except Exception as e:
+        print(f"Startup seed notice: {e}")
+
 
 
 from app.core.redis_cache import get_redis_client

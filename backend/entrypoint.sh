@@ -78,8 +78,8 @@ except Exception as e:
 "
 fi
 
-echo "Ensuring all demo accounts are seeded and verified..."
-PYTHONPATH=/app:/app/backend python /app/seed_demo_accounts.py || PYTHONPATH=. python seed_demo_accounts.py || true
+echo "Ensuring demo accounts exist..."
+python /app/seed_demo_accounts.py || true
 
 # If additional command arguments were passed (e.g. celery worker/beat), run them instead of uvicorn
 if [ "$#" -gt 0 ]; then

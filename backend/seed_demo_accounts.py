@@ -10,7 +10,8 @@ Or locally (backend/ dir with venv active):
 """
 import sys, os, uuid
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
 
 from app.database import SessionLocal
 from app.models.user import User, RoleEnum
@@ -30,45 +31,36 @@ def seed():
     try:
         for acc in DEMO_ACCOUNTS:
             email = acc["email"].strip().lower()
-            try:
-                user = db.query(User).filter(func.lower(User.email) == email).first()
-                if user:
-                    if not verify_password(acc["password"], user.password or ""):
-                        user.password = hash_password(acc["password"])
-                        print(f"[UPDATED DEMO ACCOUNT PW] {email}", flush=True)
-                    user.is_verified = True
-                    user.role = acc["role"]
-                    db.commit()
-                else:
-                    user = User(
-                        email=email,
-                        password=hash_password(acc["password"]),
-                        full_name=acc["full_name"],
-                        role=acc["role"],
-                        is_verified=True,
-                    )
-                    db.add(user)
-                    db.commit()
-                    db.refresh(user)
-                    print(f"[CREATED DEMO ACCOUNT] {email}", flush=True)
+            user = db.query(User).filter(func.lower(User.email) == email).first()
+            if user:
+                if not verify_password(acc["password"], user.password):
+                    user.password = hash_password(acc["password"])
+                user.is_verified = True
+                print(f"[UPDATE DEMO USER] {email}")
+            else:
+                user = User(
+                    user_id=uuid.uuid4(),
+                    email=email,
+                    password=hash_password(acc["password"]),
+                    full_name=acc["full_name"],
+                    role=acc["role"],
+                    is_verified=True
+                )
+                db.add(user)
+                db.flush()
+                print(f"[CREATE DEMO USER] {email}")
 
-                if acc["role"] == RoleEnum.Driver and user and user.user_id:
-                    try:
-                        driver_record = db.query(Driver).filter(Driver.user_id == user.user_id).first()
-                        if not driver_record:
-                            db.add(Driver(driver_id=uuid.uuid4(), user_id=user.user_id, status="Available"))
-                            db.commit()
-                    except Exception as de:
-                        db.rollback()
-                        print(f"[DRIVER RECORD NOTICE] {de}", flush=True)
-
-            except Exception as acc_err:
-                db.rollback()
-                print(f"[DEMO ACCOUNT SEED ERROR for {email}] {acc_err}", flush=True)
-
-        print("[DEMO SEED COMPLETE] All demo accounts processed!", flush=True)
+            if acc["role"] == RoleEnum.Driver:
+                if not db.query(Driver).filter(Driver.user_id == user.user_id).first():
+                    db.add(Driver(driver_id=uuid.uuid4(), user_id=user.user_id, status="Available"))
+        db.commit()
+        print("[SUCCESS] All demo accounts seeded!")
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Seeding demo accounts failed: {e}")
     finally:
         db.close()
 
 if __name__ == "__main__":
     seed()
+
